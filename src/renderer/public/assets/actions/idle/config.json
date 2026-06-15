@@ -1,0 +1,12 @@
+{
+  "name": "idle",
+  "label": "待机",
+  "framesDir": "./assets/actions/idle/frames_real",
+  "fps": 12,
+  "scale": 0.5,
+  "loop": true,
+  "frameCount": 61,
+  "frameWidth": 512,
+  "frameHeight": 512,
+  "framePattern": "{}.png"
+}

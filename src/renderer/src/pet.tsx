@@ -4,14 +4,19 @@ import { PetSprite } from './components/PetSprite'
 import type { AnimConfig } from '../../shared/types'
 
 /**
- * 默认动画配置
- * 后续替换真实宠物序列帧时，只需修改此处或从配置文件加载。
- * 帧文件放在 public/assets/frames/ 下，命名格式与 framePattern 一致。
+ * 默认动作配置路径
+ * 替换真实宠物序列帧时，修改此配置文件即可，无需改代码。
  *
- * 窗口尺寸会自动根据 frameWidth * scale 和 frameHeight * scale 调整。
+ * 配置文件位置：public/assets/actions/<动作名>/config.json
+ * 帧文件位置：  public/assets/actions/<动作名>/frames/
  */
-const defaultConfig: AnimConfig = {
-  framesDir: './assets/frames',
+const ACTION_CONFIG_URL = './assets/actions/idle/config.json'
+
+/** 加载失败时的兜底配置 */
+const FALLBACK_CONFIG: AnimConfig = {
+  name: 'idle',
+  label: '待机',
+  framesDir: './assets/actions/idle/frames',
   fps: 12,
   scale: 1,
   loop: true,
@@ -22,9 +27,21 @@ const defaultConfig: AnimConfig = {
 }
 
 function PetApp() {
+  const [config, setConfig] = useState<AnimConfig | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
-  // 监听主进程菜单动作（右键菜单由主进程处理，此处只接收结果）
+  // 加载动作配置
+  useEffect(() => {
+    fetch(ACTION_CONFIG_URL)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json()
+      })
+      .then((data: AnimConfig) => setConfig(data))
+      .catch(() => setConfig(FALLBACK_CONFIG))
+  }, [])
+
+  // 监听主进程菜单动作
   useEffect(() => {
     const removeListener = window.petAPI.onMenuAction((action) => {
       if (action === 'reload-anim') {
@@ -34,9 +51,11 @@ function PetApp() {
     return removeListener
   }, [])
 
+  if (!config) return null
+
   return (
     <StrictMode>
-      <PetSprite config={defaultConfig} reloadKey={reloadKey} />
+      <PetSprite config={config} reloadKey={reloadKey} />
     </StrictMode>
   )
 }
