@@ -61,6 +61,16 @@ npm run build
 2. **后台控制面板** — 宠物列表管理，动作管理，动作预览
 3. **宠物包导入/导出** — .furtwin 格式（zip），manifest.json + 序列帧资源
 
+## AI 视频生成
+
+当前 v0.1 **暂不接入** Doubao/Seedance API。AI 视频生成仍然是用户在外部工具（如豆包网页端）手动完成。
+
+FurTwin 当前只负责：
+- 播放已有的透明序列帧；
+- 后续提供本地 FFmpeg 扣绿和序列帧化处理链路。
+
+AI 视频生成的 prompt 规范和推荐动作已记录在 [`docs/ai-generation-prompt.md`](docs/ai-generation-prompt.md)，供后续产品化时参考。
+
 ## 项目结构
 
 ```

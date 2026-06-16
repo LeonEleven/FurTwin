@@ -3,4 +3,21 @@ out/
 dist/
 .DS_Store
 *.log
+
+# 本地项目背景资料
 FurTwin.md
+
+# 真实生成素材（由 FFmpeg 提取，不入版本库）
+src/renderer/public/assets/actions/**/frames_real/
+src/renderer/public/assets/actions/**/frames_test/
+src/renderer/public/assets/actions/**/frames_tmp/
+src/renderer/public/assets/actions/**/source/
+
+# 绿幕原始视频
+*.mp4
+*.mov
+*.avi
+
+# FFmpeg 测试输出
+test_chromakey_*.png
+test_colorkey_*.png
