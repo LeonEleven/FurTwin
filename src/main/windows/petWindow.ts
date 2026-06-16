@@ -5,6 +5,8 @@ import { IPC_CHANNELS, type DragPayload } from '../../shared/types'
 const isDev = !app.isPackaged
 
 let petWindow: BrowserWindow | null = null
+let moveDebounce: ReturnType<typeof setTimeout> | null = null
+let lastDisplayId: number | null = null
 
 export function createPetWindow(): BrowserWindow {
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
@@ -45,6 +47,39 @@ export function createPetWindow(): BrowserWindow {
     petWindow?.showInactive()
   })
 
+  // Cross-screen / DPI handling
+  petWindow.on('moved', () => {
+    if (!petWindow || petWindow.isDestroyed()) return
+    const bounds = petWindow.getBounds()
+    const display = screen.getDisplayNearestPoint({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 })
+    const displayChanged = lastDisplayId !== null && lastDisplayId !== display.id
+    lastDisplayId = display.id
+
+    console.log(`[pet] MOVED bounds=${bounds.width}x${bounds.height}+${bounds.x}+${bounds.y} display=${display.id} scale=${display.scaleFactor}`)
+
+    // Debounce: reapply or recompute shape after window stops moving
+    if (moveDebounce) clearTimeout(moveDebounce)
+    moveDebounce = setTimeout(() => {
+      if (!petWindow || petWindow.isDestroyed()) return
+      if (displayChanged) {
+        console.log('[pet] SHAPE_RECOMPUTE reason=display-change')
+        petWindow.webContents.send(IPC_CHANNELS.RELOAD_ANIM)
+      } else {
+        console.log('[pet] SHAPE_REFRESH reason=move-end')
+        petWindow.webContents.send(IPC_CHANNELS.PET_SURFACE_REFRESH)
+      }
+    }, 200)
+  })
+
+  screen.on('display-metrics-changed', () => {
+    if (moveDebounce) clearTimeout(moveDebounce)
+    moveDebounce = setTimeout(() => {
+      if (!petWindow || petWindow.isDestroyed()) return
+      console.log('[pet] display-metrics-changed -> SHAPE_RECOMPUTE')
+      petWindow.webContents.send(IPC_CHANNELS.RELOAD_ANIM)
+    }, 300)
+  })
+
   return petWindow
 }
 
@@ -52,28 +87,30 @@ export function getPetWindow(): BrowserWindow | null {
   return petWindow
 }
 
-/** 窗口尺寸调整 */
 export function setupWindowResize(): void {
-  ipcMain.on(IPC_CHANNELS.RESIZE_WINDOW, (_, width: number, height: number) => {
-    if (!petWindow) return
-    const w = Math.round(Number(width))
-    const h = Math.round(Number(height))
-    if (!Number.isFinite(w) || !Number.isFinite(h)) return
-    const [cx, cy] = petWindow.getPosition()
-    const [cw, ch] = petWindow.getSize()
-    petWindow.setBounds({
-      x: cx + Math.round(cw / 2) - Math.round(w / 2),
-      y: cy + Math.round(ch / 2) - Math.round(h / 2),
-      width: w,
-      height: h,
-    })
+  ipcMain.on(IPC_CHANNELS.RESIZE_WINDOW, (_event, width: number, height: number) => {
+    if (!petWindow || petWindow.isDestroyed()) return
+    const w = Math.max(1, Math.round(Number(width)))
+    const h = Math.max(1, Math.round(Number(height)))
+    if (!Number.isFinite(w) || !Number.isFinite(h)) {
+      console.warn('[pet] invalid RESIZE_WINDOW:', width, height)
+      return
+    }
+    try {
+      const [cx, cy] = petWindow.getPosition()
+      const [cw, ch] = petWindow.getSize()
+      console.log(`[pet] RESIZE_WINDOW: ${cw}x${ch} -> ${w}x${h}`)
+      petWindow.setBounds({
+        x: cx + Math.round(cw / 2) - Math.round(w / 2),
+        y: cy + Math.round(ch / 2) - Math.round(h / 2),
+        width: w, height: h,
+      })
+    } catch (e) {
+      console.warn('[pet] RESIZE_WINDOW failed:', e)
+    }
   })
 }
 
-/**
- * 手动拖动
- * 渲染进程发送 { screenX, screenY } 对象，主进程计算窗口新位置。
- */
 export function setupPetDrag(): void {
   let isDragging = false
   let startMouseX = 0
@@ -81,22 +118,36 @@ export function setupPetDrag(): void {
   let startWinX = 0
   let startWinY = 0
 
-  ipcMain.on(IPC_CHANNELS.PET_DRAG_START, (_, payload: DragPayload) => {
-    if (!petWindow) return
+  ipcMain.on(IPC_CHANNELS.PET_DRAG_START, (_event, payload: DragPayload) => {
+    if (!petWindow || petWindow.isDestroyed()) return
+    const sx = Number(payload?.screenX)
+    const sy = Number(payload?.screenY)
+    if (!Number.isFinite(sx) || !Number.isFinite(sy)) {
+      console.warn('[pet] invalid DRAG_START:', payload)
+      return
+    }
     isDragging = true
-    startMouseX = Number(payload.screenX)
-    startMouseY = Number(payload.screenY)
+    startMouseX = sx
+    startMouseY = sy
     const [winX, winY] = petWindow.getPosition()
     startWinX = winX
     startWinY = winY
   })
 
-  ipcMain.on(IPC_CHANNELS.PET_DRAG_MOVE, (_, payload: DragPayload) => {
-    if (!petWindow || !isDragging) return
-    const x = Math.round(startWinX + (Number(payload.screenX) - startMouseX))
-    const y = Math.round(startWinY + (Number(payload.screenY) - startMouseY))
+  ipcMain.on(IPC_CHANNELS.PET_DRAG_MOVE, (_event, payload: DragPayload) => {
+    if (!petWindow || petWindow.isDestroyed() || !isDragging) return
+    const sx = Number(payload?.screenX)
+    const sy = Number(payload?.screenY)
+    if (!Number.isFinite(sx) || !Number.isFinite(sy)) return
+    const x = Math.round(startWinX + (sx - startMouseX))
+    const y = Math.round(startWinY + (sy - startMouseY))
     if (!Number.isFinite(x) || !Number.isFinite(y)) return
-    petWindow.setPosition(x, y, false)
+    try {
+      petWindow.setPosition(x, y, false)
+    } catch (e) {
+      console.warn('[pet] setPosition failed:', e)
+      isDragging = false
+    }
   })
 
   ipcMain.on(IPC_CHANNELS.PET_DRAG_END, () => {
@@ -104,28 +155,25 @@ export function setupPetDrag(): void {
   })
 }
 
-/** 右键菜单（由渲染进程主动触发） */
 export function setupContextMenu(): void {
   ipcMain.on(IPC_CHANNELS.SHOW_CONTEXT_MENU, () => {
-    if (!petWindow) return
-
+    if (!petWindow || petWindow.isDestroyed()) return
     const template: Electron.MenuItemConstructorOptions[] = [
       {
         label: '重新加载动画',
         click: () => {
-          petWindow?.webContents.send(IPC_CHANNELS.MENU_ACTION, 'reload-anim')
+          if (petWindow && !petWindow.isDestroyed()) {
+            petWindow.webContents.send(IPC_CHANNELS.MENU_ACTION, 'reload-anim')
+          }
         },
       },
       { type: 'separator' },
-      {
-        label: '退出 FurTwin',
-        click: () => {
-          app.quit()
-        },
-      },
+      { label: '退出 FurTwin', click: () => { app.quit() } },
     ]
-
-    const menu = Menu.buildFromTemplate(template)
-    menu.popup({ window: petWindow })
+    try {
+      Menu.buildFromTemplate(template).popup({ window: petWindow })
+    } catch (e) {
+      console.warn('[pet] context menu failed:', e)
+    }
   })
 }

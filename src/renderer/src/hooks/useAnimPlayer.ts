@@ -82,15 +82,16 @@ export function useAnimPlayer(config: AnimConfig | null, reloadKey?: number): Us
     }
   }, [config, reloadKey])
 
-  /** 根据帧索引构建图片路径 */
+  /** 根据帧索引构建图片路径（带 cache busting） */
   const buildFrameSrc = useCallback(
     (frameIndex: number): string | null => {
       if (!config) return null
       const num = String(frameIndex + 1).padStart(4, '0')
       const filename = config.framePattern.replace('{}', num)
-      return `${config.framesDir}/${filename}`
+      // 使用 reloadKey 作为 cache buster，确保切换配置后浏览器不使用旧缓存
+      return `${config.framesDir}/${filename}?v=${reloadKey ?? 0}`
     },
-    [config]
+    [config, reloadKey]
   )
 
   return {

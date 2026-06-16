@@ -4,9 +4,17 @@
 
 ## 当前阶段
 
-**v0.1 Demo** — 最小桌宠展示基线（第二阶段）
+**v0.1 Demo** — 控制面板 + FFmpeg 提取 + per-frame 桌宠 shape
 
-已验证核心链路：透明窗口 + 序列帧动画播放 + 拖动 + 右键菜单 + 配置驱动的动作目录。
+已验证核心链路：
+- 透明窗口 + 序列帧动画播放 + 拖动 + 右键菜单
+- 控制面板 FFmpeg 绿幕视频提取（扣绿、trim-alpha、clean-components、水印遮罩）
+- 应用到桌宠预览（generated 唯一输出目录）
+- 恢复 Demo 预览
+- per-frame scanline shape（解决失焦灰白线问题）
+
+已知问题：
+- 拖动过程中 per-frame shape 暂停，动画继续播放时可能显示不全
 
 ## 技术栈
 
@@ -29,33 +37,36 @@ npm run build
 
 ## 当前已实现功能
 
-- 透明、无边框、置顶的桌宠展示窗口
-- 窗口不在任务栏显示，无阴影，无菜单栏
+- 透明、无边框、置顶的桌宠展示窗口（不在任务栏显示，无阴影，无菜单栏）
 - 序列帧动画循环播放（requestAnimationFrame + 时间戳控制帧率）
 - 动作配置驱动：每个动作独立目录，含 config.json + frames/
-- 支持配置 fps、scale、loop、frameCount、frameWidth、frameHeight、framePattern
 - Pointer Events + setPointerCapture 实现稳定拖动
 - 右键菜单（重新加载动画 / 退出应用）
 - 窗口尺寸自动匹配动画帧尺寸（frameWidth × scale）
+- per-frame scanline shape（窗口形状精确贴合每帧 alpha 边界，解决失焦灰白线）
+- 控制面板 FFmpeg 绿幕视频提取（扣绿、trim-alpha、clean-components、水印遮罩）
+- 控制面板「应用到桌宠预览」（generated 唯一输出目录，不覆盖当前帧）
+- 控制面板「恢复 Demo 预览」
+- 命令行 FFmpeg 扣绿脚本（含水印遮罩、透明边界裁剪、组件清理）
 - 安全配置：contextIsolation: true、nodeIntegration: false、preload 桥接
-- 命令行 FFmpeg 扣绿脚本（绿幕视频 → 透明 PNG/WebP 序列帧，含水印遮罩）
 - 12 帧彩色圆形占位动画（用于验证播放链路）
 
 ## 当前暂不支持的功能
 
-- 应用内 FFmpeg 视频导入 / 绿幕处理 UI
-- 自动化视频处理工作流（当前需命令行运行脚本 + 手动更新 config.json）
 - 宠物创建流程 / 动作管理面板
-- .furtwin 宠物包导入/导出
-- 控制面板 UI
 - 多动作切换
 - 多宠物同时展示
+- .furtwin 宠物包导入/导出
 - 点击穿透（透明区域不阻挡其他程序）
 - 像素级 alpha 命中测试
 - Doubao / Seedance API 集成
 - CorridorKey 集成
 - 跨平台完整兼容
 - 自动更新 / 安装包构建
+
+## 已知问题
+
+- 拖动过程中 per-frame shape 暂停，动画继续播放时可能显示不全
 
 ## 下一阶段计划
 

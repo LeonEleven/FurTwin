@@ -1,30 +1,66 @@
-import { useEffect, useCallback, useRef } from 'react'
-import { useAnimPlayer, type AnimConfig } from '../hooks/useAnimPlayer'
+import { useEffect, useCallback, useRef, useState } from 'react'
+import { useAnimPlayer } from '../hooks/useAnimPlayer'
+import type { AnimConfig } from '../../../shared/types'
 
 interface PetSpriteProps {
   config: AnimConfig
   reloadKey?: number
 }
 
-/**
- * 桌宠精灵组件
- * - 序列帧动画播放
- * - Pointer Events + setPointerCapture 实现手动拖动
- * - 右键菜单通过 IPC 由主进程弹出
- */
 export function PetSprite({ config, reloadKey }: PetSpriteProps) {
   const { currentFrameSrc, currentFrame, totalFrames } = useAnimPlayer(config, reloadKey)
   const isDragging = useRef(false)
+  const [repaintKey, setRepaintKey] = useState(0)
 
   const displayWidth = config.frameWidth * config.scale
   const displayHeight = config.frameHeight * config.scale
 
-  // 通知主进程调整窗口尺寸
+  // resize window
   useEffect(() => {
+    console.log(`[pet] resizeWindow: ${displayWidth}x${displayHeight}`)
     window.petAPI.resizeWindow(displayWidth, displayHeight)
   }, [displayWidth, displayHeight])
 
-  // --- 左键拖动 ---
+  // compute per-frame shapes after config changes
+  useEffect(() => {
+    if (!config) return
+    console.log(`[pet] precomputing per-frame shape for: ${config.framesDir}`)
+    const timer = setTimeout(() => {
+      window.petAPI.computePetShape({
+        framesDir: config.framesDir,
+        framePattern: config.framePattern,
+        frameCount: config.frameCount,
+        frameWidth: config.frameWidth,
+        frameHeight: config.frameHeight,
+        scale: config.scale,
+      })
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [config, reloadKey])
+
+  // Apply per-frame shape when animation frame changes (skip during drag)
+  useEffect(() => {
+    if (isDragging.current) return
+    window.petAPI.applyFrameShape(currentFrame)
+  }, [currentFrame])
+
+  // FORCE_REPAINT
+  useEffect(() => {
+    const removeListener = window.petAPI.onForceRepaint(() => {
+      setRepaintKey((k) => k + 1)
+    })
+    return removeListener
+  }, [])
+
+  // PET_SURFACE_REFRESH
+  useEffect(() => {
+    const removeListener = window.petAPI.onSurfaceRefresh(() => {
+      setRepaintKey((k) => k + 1)
+    })
+    return removeListener
+  }, [])
+
+  // --- drag ---
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return
     isDragging.current = true
@@ -50,11 +86,14 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
     window.petAPI.dragEnd()
   }, [])
 
-  // --- 右键菜单 ---
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     window.petAPI.showContextMenu()
   }, [])
+
+  const imgSrc = currentFrameSrc
+    ? `${currentFrameSrc}&r=${repaintKey}`
+    : null
 
   return (
     <div
@@ -76,9 +115,9 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
         backgroundColor: 'transparent',
       }}
     >
-      {currentFrameSrc && (
+      {imgSrc && (
         <img
-          src={currentFrameSrc}
+          src={imgSrc}
           alt=""
           draggable={false}
           style={{

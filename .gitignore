@@ -7,7 +7,9 @@ dist/
 # 本地项目背景资料
 FurTwin.md
 
-# 真实生成素材（由 FFmpeg 提取，不入版本库）
+# 本地预览配置和真实生成素材（不入版本库）
+src/renderer/public/assets/actions/**/local.config.json
+src/renderer/public/assets/actions/**/generated/
 src/renderer/public/assets/actions/**/frames_real/
 src/renderer/public/assets/actions/**/frames_test/
 src/renderer/public/assets/actions/**/frames_tmp/
