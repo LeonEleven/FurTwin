@@ -38,11 +38,13 @@ npm run build
 - 右键菜单（重新加载动画 / 退出应用）
 - 窗口尺寸自动匹配动画帧尺寸（frameWidth × scale）
 - 安全配置：contextIsolation: true、nodeIntegration: false、preload 桥接
+- 命令行 FFmpeg 扣绿脚本（绿幕视频 → 透明 PNG/WebP 序列帧，含水印遮罩）
 - 12 帧彩色圆形占位动画（用于验证播放链路）
 
 ## 当前暂不支持的功能
 
-- FFmpeg 视频处理 / 绿幕扣除
+- 应用内 FFmpeg 视频导入 / 绿幕处理 UI
+- 自动化视频处理工作流（当前需命令行运行脚本 + 手动更新 config.json）
 - 宠物创建流程 / 动作管理面板
 - .furtwin 宠物包导入/导出
 - 控制面板 UI
@@ -70,6 +72,26 @@ FurTwin 当前只负责：
 - 后续提供本地 FFmpeg 扣绿和序列帧化处理链路。
 
 AI 视频生成的 prompt 规范和推荐动作已记录在 [`docs/ai-generation-prompt.md`](docs/ai-generation-prompt.md)，供后续产品化时参考。
+
+## FFmpeg 扣绿脚本
+
+项目提供了 FFmpeg 绿幕扣除脚本，可将绿幕视频转为透明 PNG/WebP 序列帧：
+
+```bash
+# 基本用法
+node scripts/extract-transparent-frames.mjs --input cat.mp4
+
+# 如使用豆包免费版等带水印素材，且水印未与宠物主体重叠，
+# 可尝试角落遮罩（不改变画布尺寸）
+node scripts/extract-transparent-frames.mjs --input cat.mp4 --mask-preset doubao-free
+
+# 手动指定遮罩区域
+node scripts/extract-transparent-frames.mjs --input cat.mp4 --mask-region "0:0:220:90,1020:630:260:90"
+```
+
+脚本支持扣绿参数调节、水印区域透明遮罩、可选画面裁剪、输出格式选择等。详见 [`docs/ffmpeg-keying.md`](docs/ffmpeg-keying.md)。
+
+**水印处理说明**：`--mask-preset doubao-free` 是把水印角落区域设为透明，不是自动去水印。若水印覆盖宠物主体，建议重新生成无水印素材或调整生成构图。优先使用无水印素材来源。
 
 ## 项目结构
 
