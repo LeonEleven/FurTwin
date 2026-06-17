@@ -59,10 +59,11 @@ export function setupPreview(): void {
   // (Don't delete - user may have a valid preview. Only delete on explicit RESTORE_DEMO)
 
   // Apply to pet preview
-  ipcMain.on(IPC_CHANNELS.APPLY_TO_PREVIEW, (_event, payload: { outputDir?: string }) => {
+  ipcMain.on(IPC_CHANNELS.APPLY_TO_PREVIEW, (_event, payload: { outputDir?: string; displayScale?: number }) => {
     console.log('[preview] APPLY_TO_PREVIEW received')
 
     const outputDir = payload?.outputDir || resolve('src/renderer/public/assets/actions/idle/frames_real')
+    const displayScale = Number(payload?.displayScale) || 0.5
     console.log(`[preview] scanning dir: ${outputDir}`)
 
     const frames = scanFrames(outputDir)
@@ -80,6 +81,7 @@ export function setupPreview(): void {
       framesDir: rendererPath,
       fps: 12,
       scale: 0.5,
+      displayScale,
       loop: true,
       frameCount: frames.count,
       frameWidth: frames.width,
@@ -89,7 +91,7 @@ export function setupPreview(): void {
 
     try {
       writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
-      console.log('[preview] local.config.json written')
+      console.log(`[preview] write local.config scale=${config.scale} displayScale=${config.displayScale}`)
     } catch (e) {
       console.error('[preview] failed to write local.config.json:', e)
       return

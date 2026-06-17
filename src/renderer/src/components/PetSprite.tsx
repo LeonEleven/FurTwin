@@ -11,20 +11,47 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
   const { currentFrameSrc, currentFrame, totalFrames, pause, resume } = useAnimPlayer(config, reloadKey)
   const isDragging = useRef(false)
   const [repaintKey, setRepaintKey] = useState(0)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
 
-  const displayWidth = config.frameWidth * config.scale
-  const displayHeight = config.frameHeight * config.scale
+  // Unified effectiveScale
+  const effectiveScale = config.displayScale ?? config.scale
+  const displayWidth = Math.round(config.frameWidth * effectiveScale)
+  const displayHeight = Math.round(config.frameHeight * effectiveScale)
 
-  // resize window
+  // DOM diagnostic log
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const wrapper = wrapperRef.current
+      const img = imgRef.current
+      if (!wrapper || !img) return
+
+      const wRect = wrapper.getBoundingClientRect()
+      const iRect = img.getBoundingClientRect()
+      const wStyle = getComputedStyle(wrapper)
+      const iStyle = getComputedStyle(img)
+
+      console.log(`[pet-dom] window=${window.innerWidth}x${window.innerHeight}`)
+      console.log(`[pet-dom] wrapperRect=${Math.round(wRect.width)}x${Math.round(wRect.height)} pos=${Math.round(wRect.left)},${Math.round(wRect.top)}`)
+      console.log(`[pet-dom] imgRect=${Math.round(iRect.width)}x${Math.round(iRect.height)} pos=${Math.round(iRect.left)},${Math.round(iRect.top)}`)
+      console.log(`[pet-dom] imgNatural=${img.naturalWidth}x${img.naturalHeight}`)
+      console.log(`[pet-dom] wrapperStyle display=${wStyle.display} width=${wStyle.width} height=${wStyle.height} transform=${wStyle.transform}`)
+      console.log(`[pet-dom] imgStyle display=${iStyle.display} width=${iStyle.width} height=${iStyle.height} objectFit=${iStyle.objectFit} transform=${iStyle.transform}`)
+      console.log(`[pet-dom] effectiveScale=${effectiveScale} displaySize=${displayWidth}x${displayHeight} frame=${config.frameWidth}x${config.frameHeight}`)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [effectiveScale, displayWidth, displayHeight, config.frameWidth, config.frameHeight, currentFrameSrc])
+
+  // Resize window
   useEffect(() => {
     console.log(`[pet] resizeWindow: ${displayWidth}x${displayHeight}`)
     window.petAPI.resizeWindow(displayWidth, displayHeight)
   }, [displayWidth, displayHeight])
 
-  // compute per-frame shapes after config changes
+  // Compute per-frame shapes
   useEffect(() => {
     if (!config) return
-    console.log(`[pet] precomputing per-frame shape: ${config.framesDir}`)
+    console.log(`[pet] precomputing shape: ${config.framesDir} effectiveScale=${effectiveScale}`)
     const timer = setTimeout(() => {
       window.petAPI.computePetShape({
         framesDir: config.framesDir,
@@ -32,11 +59,11 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
         frameCount: config.frameCount,
         frameWidth: config.frameWidth,
         frameHeight: config.frameHeight,
-        scale: config.scale,
+        effectiveScale,
       })
     }, 200)
     return () => clearTimeout(timer)
-  }, [config, reloadKey])
+  }, [config, reloadKey, effectiveScale])
 
   // Apply per-frame shape when frame changes (skip during drag)
   useEffect(() => {
@@ -54,11 +81,11 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
     return window.petAPI.onSurfaceRefresh(() => setRepaintKey((k) => k + 1))
   }, [])
 
-  // --- drag: pause animation during drag ---
+  // --- drag ---
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return
     isDragging.current = true
-    pause() // freeze animation frame
+    pause()
     e.currentTarget.setPointerCapture(e.pointerId)
     window.petAPI.dragStart({ screenX: e.screenX, screenY: e.screenY })
   }, [pause])
@@ -73,8 +100,7 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
     isDragging.current = false
     e.currentTarget.releasePointerCapture(e.pointerId)
     window.petAPI.dragEnd()
-    resume() // resume animation
-    // Re-apply current frame shape after resume
+    resume()
     window.petAPI.applyFrameShape(currentFrame)
   }, [resume, currentFrame])
 
@@ -96,33 +122,47 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
 
   return (
     <div
+      ref={wrapperRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
       onContextMenu={handleContextMenu}
       style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
         width: displayWidth,
         height: displayHeight,
+        overflow: 'hidden',
         cursor: 'grab',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        margin: 0,
+        padding: 0,
         outline: 'none',
         border: 'none',
         boxShadow: 'none',
-        backgroundColor: 'transparent',
+        background: 'transparent',
+        display: 'block',
       }}
     >
       {imgSrc && (
         <img
+          ref={imgRef}
           src={imgSrc}
           alt=""
           draggable={false}
           style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain',
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            display: 'block',
+            width: displayWidth,
+            height: displayHeight,
+            objectFit: 'fill',
+            maxWidth: 'none',
+            maxHeight: 'none',
+            margin: 0,
+            padding: 0,
             pointerEvents: 'none',
             WebkitUserDrag: 'none',
           }}

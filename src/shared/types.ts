@@ -1,10 +1,13 @@
-/** 动画配置 — 对应每个动作目录下的 config.json */
+/** 动作配置 — 对应每个动作目录下的 config.json */
 export interface AnimConfig {
   name: string
   label: string
   framesDir: string
   fps: number
+  /** 帧原始缩放（用于 shape 计算等） */
   scale: number
+  /** 显示缩放覆盖（可选，优先用于窗口尺寸；不存在时使用 scale） */
+  displayScale?: number
   loop: boolean
   frameCount: number
   frameWidth: number
@@ -70,4 +73,5 @@ export const IPC_CHANNELS = {
   RESTORE_DEMO: 'RESTORE_DEMO',
   OPEN_PATH: 'OPEN_PATH',
   LIST_GENERATED_ASSETS: 'LIST_GENERATED_ASSETS',
+  SAVE_ASSET_DISPLAY_SCALE: 'SAVE_ASSET_DISPLAY_SCALE',
 } as const

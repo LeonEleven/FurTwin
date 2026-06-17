@@ -50,14 +50,15 @@ declare global {
       onExtractLog: (callback: (log: string) => void) => () => void
       onExtractDone: (callback: (result: { outputDir: string; frameCount: number; frameWidth: number; frameHeight: number; trimWidth: number; trimHeight: number }) => void) => () => void
       onExtractError: (callback: (err: { code: number; message: string }) => void) => () => void
-      applyToPreview: (outputDir: string) => void
+      applyToPreview: (outputDir: string, displayScale?: number) => void
       restoreDemo: () => void
       openPath: (path: string) => Promise<{ ok: boolean; error?: string }>
       listGeneratedAssets: () => Promise<Array<{
         id: string; path: string; frameCount: number;
         frameWidth: number; frameHeight: number;
-        format: string; modifiedAt: number
+        format: string; modifiedAt: number; displayScale: number
       }>>
+      saveAssetDisplayScale: (path: string, displayScale: number) => void
     }
   }
 }

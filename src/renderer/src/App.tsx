@@ -5,7 +5,7 @@ type Status = 'idle' | 'processing' | 'success' | 'error'
 interface GeneratedAsset {
   id: string; path: string; frameCount: number;
   frameWidth: number; frameHeight: number;
-  format: string; modifiedAt: number
+  format: string; modifiedAt: number; displayScale: number
 }
 
 interface ExtractResult {
@@ -122,7 +122,7 @@ export function App() {
       if (!ok) return
     }
     console.log('[renderer] applyToPreview:', extractResult.outputDir)
-    window.controlAPI.applyToPreview(extractResult.outputDir)
+    window.controlAPI.applyToPreview(extractResult.outputDir, 0.5)
   }, [extractResult])
 
   const handleRestoreDemo = useCallback(() => {
@@ -137,8 +137,16 @@ export function App() {
   }, [extractResult])
 
   const handleApplyHistory = useCallback((asset: GeneratedAsset) => {
-    console.log('[renderer] apply history:', asset.id)
-    window.controlAPI.applyToPreview(asset.path)
+    console.log('[renderer] apply history:', asset.id, 'displayScale:', asset.displayScale)
+    // Save displayScale to asset metadata
+    window.controlAPI.saveAssetDisplayScale(asset.path, asset.displayScale)
+    window.controlAPI.applyToPreview(asset.path, asset.displayScale)
+  }, [])
+
+  const handleDisplayScaleChange = useCallback((assetId: string, value: string) => {
+    const num = parseFloat(value)
+    if (!Number.isFinite(num) || num <= 0) return
+    setHistory(prev => prev.map(a => a.id === assetId ? { ...a, displayScale: num } : a))
   }, [])
 
   const handleOpenHistoryDir = useCallback(async (asset: GeneratedAsset) => {
@@ -306,7 +314,17 @@ export function App() {
                       {asset.frameCount} 帧 · {asset.frameWidth}x{asset.frameHeight} · {asset.format}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8, alignItems: 'center' }}>
+                    <label style={{ fontSize: 11, color: '#666' }}>缩放</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      max="2"
+                      value={asset.displayScale}
+                      onChange={(e) => handleDisplayScaleChange(asset.id, e.target.value)}
+                      style={{ width: 48, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3 }}
+                    />
                     <button onClick={() => handleApplyHistory(asset)} style={{
                       padding: '3px 10px', fontSize: 11, cursor: 'pointer',
                       backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: 3,

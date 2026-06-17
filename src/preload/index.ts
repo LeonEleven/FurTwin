@@ -94,8 +94,8 @@ contextBridge.exposeInMainWorld('controlAPI', {
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.EXTRACT_ERROR, handler) }
   },
   // --- 应用到预览 ---
-  applyToPreview: (outputDir: string) => {
-    ipcRenderer.send(IPC_CHANNELS.APPLY_TO_PREVIEW, { outputDir })
+  applyToPreview: (outputDir: string, displayScale?: number) => {
+    ipcRenderer.send(IPC_CHANNELS.APPLY_TO_PREVIEW, { outputDir, displayScale })
   },
   // --- 恢复 Demo ---
   restoreDemo: () => {
@@ -109,8 +109,11 @@ contextBridge.exposeInMainWorld('controlAPI', {
   listGeneratedAssets: (): Promise<Array<{
     id: string; path: string; frameCount: number;
     frameWidth: number; frameHeight: number;
-    format: string; modifiedAt: number
+    format: string; modifiedAt: number; displayScale: number
   }>> => {
     return ipcRenderer.invoke(IPC_CHANNELS.LIST_GENERATED_ASSETS)
+  },
+  saveAssetDisplayScale: (path: string, displayScale: number) => {
+    ipcRenderer.send(IPC_CHANNELS.SAVE_ASSET_DISPLAY_SCALE, { path, displayScale })
   },
 })

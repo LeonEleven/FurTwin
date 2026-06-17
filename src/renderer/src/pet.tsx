@@ -20,11 +20,12 @@ const FALLBACK_CONFIG: AnimConfig = {
 }
 
 function logConfig(source: string, cfg: AnimConfig) {
-  const winW = Math.round(cfg.frameWidth * cfg.scale)
-  const winH = Math.round(cfg.frameHeight * cfg.scale)
+  const effectiveScale = cfg.displayScale ?? cfg.scale
+  const winW = Math.round(cfg.frameWidth * effectiveScale)
+  const winH = Math.round(cfg.frameHeight * effectiveScale)
   console.log(`[pet] PET_CONFIG source=${source}`)
   console.log(`[pet] framesDir=${cfg.framesDir}`)
-  console.log(`[pet] frame=${cfg.frameWidth}x${cfg.frameHeight} scale=${cfg.scale}`)
+  console.log(`[pet] frame=${cfg.frameWidth}x${cfg.frameHeight} scale=${cfg.scale}${cfg.displayScale != null ? ` displayScale=${cfg.displayScale}` : ''} effectiveScale=${effectiveScale}`)
   console.log(`[pet] expectedWindow=${winW}x${winH}`)
   console.log(`[pet] frameCount=${cfg.frameCount} pattern=${cfg.framePattern}`)
 }

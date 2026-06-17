@@ -1,18 +1,24 @@
 import { ipcMain } from 'electron'
-import { readdirSync, readFileSync, statSync, existsSync } from 'fs'
+import { readdirSync, readFileSync, statSync, existsSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { IPC_CHANNELS } from '../../shared/types'
 
 const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
+const METADATA_FILE = 'asset-metadata.json'
 
 interface GeneratedAsset {
-  id: string          // timestamp folder name
-  path: string        // absolute path
+  id: string
+  path: string
   frameCount: number
   frameWidth: number
   frameHeight: number
   format: string
-  modifiedAt: number  // ms timestamp
+  modifiedAt: number
+  displayScale: number
+}
+
+interface AssetMetadata {
+  displayScale: number
 }
 
 function getPngDimensions(filePath: string): { width: number; height: number } | null {
@@ -23,6 +29,24 @@ function getPngDimensions(filePath: string): { width: number; height: number } |
     }
   } catch {}
   return null
+}
+
+function readMetadata(dirPath: string): AssetMetadata | null {
+  const metaPath = join(dirPath, METADATA_FILE)
+  if (!existsSync(metaPath)) return null
+  try {
+    return JSON.parse(readFileSync(metaPath, 'utf-8'))
+  } catch {
+    return null
+  }
+}
+
+function writeMetadata(dirPath: string, meta: AssetMetadata): void {
+  try {
+    writeFileSync(join(dirPath, METADATA_FILE), JSON.stringify(meta, null, 2), 'utf-8')
+  } catch (e) {
+    console.warn('[generated] write metadata failed:', e)
+  }
 }
 
 function scanGeneratedDir(): GeneratedAsset[] {
@@ -36,8 +60,6 @@ function scanGeneratedDir(): GeneratedAsset[] {
     const dirPath = join(GENERATED_DIR, entry.name)
     try {
       const stat = statSync(dirPath)
-
-      // Find frames
       let frameCount = 0
       let frameWidth = 0
       let frameHeight = 0
@@ -49,15 +71,13 @@ function scanGeneratedDir(): GeneratedAsset[] {
           frameCount = files.length
           format = fmt
           const dims = getPngDimensions(join(dirPath, files[0]))
-          if (dims) {
-            frameWidth = dims.width
-            frameHeight = dims.height
-          }
+          if (dims) { frameWidth = dims.width; frameHeight = dims.height }
           break
         }
       }
 
       if (frameCount > 0) {
+        const meta = readMetadata(dirPath)
         assets.push({
           id: entry.name,
           path: dirPath,
@@ -66,12 +86,12 @@ function scanGeneratedDir(): GeneratedAsset[] {
           frameHeight,
           format,
           modifiedAt: stat.mtimeMs,
+          displayScale: meta?.displayScale ?? 0.5,
         })
       }
     } catch {}
   }
 
-  // Sort by modified time descending
   assets.sort((a, b) => b.modifiedAt - a.modifiedAt)
   return assets
 }
@@ -86,5 +106,11 @@ export function setupGeneratedAssets(): void {
       console.warn('[generated] scan failed:', e)
       return []
     }
+  })
+
+  ipcMain.on(IPC_CHANNELS.SAVE_ASSET_DISPLAY_SCALE, (_event, payload: { path: string; displayScale: number }) => {
+    if (!payload?.path || !Number.isFinite(payload.displayScale)) return
+    writeMetadata(payload.path, { displayScale: payload.displayScale })
+    console.log(`[generated] saved displayScale=${payload.displayScale} to ${payload.path}`)
   })
 }

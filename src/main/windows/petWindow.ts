@@ -91,11 +91,21 @@ export function setupWindowResize(): void {
     try {
       const [cx, cy] = petWindow.getPosition()
       const [cw, ch] = petWindow.getSize()
-      petWindow.setBounds({
-        x: cx + Math.round(cw / 2) - Math.round(w / 2),
-        y: cy + Math.round(ch / 2) - Math.round(h / 2),
-        width: w, height: h,
-      })
+
+      // Bottom-center anchor: keep center x and bottom y stable
+      const centerX = cx + Math.round(cw / 2)
+      const bottomY = cy + ch
+      let newX = centerX - Math.round(w / 2)
+      let newY = bottomY - h
+
+      // Clamp to display work area (avoid taskbar)
+      const display = screen.getDisplayMatching({ x: cx, y: cy, width: cw, height: ch })
+      const wa = display.workArea
+      const clampedX = Math.max(wa.x, Math.min(newX, wa.x + wa.width - w))
+      const clampedY = Math.max(wa.y, Math.min(newY, wa.y + wa.height - h))
+
+      console.log(`[pet] RESIZE_WINDOW bottom-anchor old=${cw}x${ch}+${cx}+${cy} new=${w}x${h} clamped=${clampedX}+${clampedY}`)
+      petWindow.setBounds({ x: clampedX, y: clampedY, width: w, height: h })
     } catch (e) {
       console.warn('[pet] RESIZE_WINDOW failed:', e)
     }
