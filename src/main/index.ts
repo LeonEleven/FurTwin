@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { createPetWindow, setupWindowResize, setupPetDrag, setupContextMenu } from './windows/petWindow'
-import { createControlPanel } from './windows/controlPanel'
+import { createControlPanel, setQuitting, showControlPanel } from './windows/controlPanel'
 import { setupSelectVideo, setupExtractFrames } from './ipc/extract'
 import { setupPreview } from './ipc/preview'
 import { setupPetShape } from './ipc/petShape'
@@ -14,7 +14,7 @@ app.whenReady().then(() => {
   setupPetDrag()
   setupContextMenu()
 
-  // 控制面板
+  // 控制面板（初始隐藏）
   createControlPanel()
 
   // IPC
@@ -29,6 +29,11 @@ app.whenReady().then(() => {
       createControlPanel()
     }
   })
+})
+
+// Allow real quit (bypass close->hide)
+app.on('before-quit', () => {
+  setQuitting()
 })
 
 app.on('window-all-closed', () => {
