@@ -8,7 +8,7 @@ interface PetSpriteProps {
 }
 
 export function PetSprite({ config, reloadKey }: PetSpriteProps) {
-  const { currentFrameSrc, currentFrame, totalFrames } = useAnimPlayer(config, reloadKey)
+  const { currentFrameSrc, currentFrame, totalFrames, pause, resume } = useAnimPlayer(config, reloadKey)
   const isDragging = useRef(false)
   const [repaintKey, setRepaintKey] = useState(0)
 
@@ -24,7 +24,7 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
   // compute per-frame shapes after config changes
   useEffect(() => {
     if (!config) return
-    console.log(`[pet] precomputing per-frame shape for: ${config.framesDir}`)
+    console.log(`[pet] precomputing per-frame shape: ${config.framesDir}`)
     const timer = setTimeout(() => {
       window.petAPI.computePetShape({
         framesDir: config.framesDir,
@@ -38,7 +38,7 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
     return () => clearTimeout(timer)
   }, [config, reloadKey])
 
-  // Apply per-frame shape when animation frame changes (skip during drag)
+  // Apply per-frame shape when frame changes (skip during drag)
   useEffect(() => {
     if (isDragging.current) return
     window.petAPI.applyFrameShape(currentFrame)
@@ -46,27 +46,22 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
 
   // FORCE_REPAINT
   useEffect(() => {
-    const removeListener = window.petAPI.onForceRepaint(() => {
-      setRepaintKey((k) => k + 1)
-    })
-    return removeListener
+    return window.petAPI.onForceRepaint(() => setRepaintKey((k) => k + 1))
   }, [])
 
   // PET_SURFACE_REFRESH
   useEffect(() => {
-    const removeListener = window.petAPI.onSurfaceRefresh(() => {
-      setRepaintKey((k) => k + 1)
-    })
-    return removeListener
+    return window.petAPI.onSurfaceRefresh(() => setRepaintKey((k) => k + 1))
   }, [])
 
-  // --- drag ---
+  // --- drag: pause animation during drag ---
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return
     isDragging.current = true
+    pause() // freeze animation frame
     e.currentTarget.setPointerCapture(e.pointerId)
     window.petAPI.dragStart({ screenX: e.screenX, screenY: e.screenY })
-  }, [])
+  }, [pause])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!isDragging.current) return
@@ -78,13 +73,17 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
     isDragging.current = false
     e.currentTarget.releasePointerCapture(e.pointerId)
     window.petAPI.dragEnd()
-  }, [])
+    resume() // resume animation
+    // Re-apply current frame shape after resume
+    window.petAPI.applyFrameShape(currentFrame)
+  }, [resume, currentFrame])
 
   const handlePointerCancel = useCallback((e: React.PointerEvent) => {
     isDragging.current = false
     try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
     window.petAPI.dragEnd()
-  }, [])
+    resume()
+  }, [resume])
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()

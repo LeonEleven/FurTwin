@@ -6,16 +6,14 @@ interface UseAnimPlayerReturn {
   isPlaying: boolean
   currentFrame: number
   totalFrames: number
-  /** 重新从第 0 帧开始播放 */
   restart: () => void
+  pause: () => void
+  resume: () => void
 }
 
 /**
  * 序列帧动画播放 hook
- * 使用 requestAnimationFrame + 时间戳控制帧率，保证稳定播放。
- *
- * @param config  动画配置，为 null 时停止播放
- * @param reloadKey 外部递增此值可强制重启动画
+ * requestAnimationFrame + 时间戳控制帧率。
  */
 export function useAnimPlayer(config: AnimConfig | null, reloadKey?: number): UseAnimPlayerReturn {
   const [currentFrame, setCurrentFrame] = useState(0)
@@ -23,15 +21,25 @@ export function useAnimPlayer(config: AnimConfig | null, reloadKey?: number): Us
   const frameRef = useRef(0)
   const lastTimeRef = useRef(0)
   const rafRef = useRef<number>(0)
+  const pausedRef = useRef(false)
 
-  // 重启动画（供右键菜单"重新加载动画"使用）
   const restart = useCallback(() => {
     if (!config) return
     frameRef.current = 0
     lastTimeRef.current = 0
+    pausedRef.current = false
     setCurrentFrame(0)
     setIsPlaying(true)
   }, [config])
+
+  const pause = useCallback(() => {
+    pausedRef.current = true
+  }, [])
+
+  const resume = useCallback(() => {
+    pausedRef.current = false
+    lastTimeRef.current = 0 // reset timer to avoid time jump
+  }, [])
 
   useEffect(() => {
     if (!config) {
@@ -42,10 +50,17 @@ export function useAnimPlayer(config: AnimConfig | null, reloadKey?: number): Us
     const interval = 1000 / config.fps
     frameRef.current = 0
     lastTimeRef.current = 0
+    pausedRef.current = false
     setCurrentFrame(0)
     setIsPlaying(true)
 
     function tick(timestamp: number) {
+      if (pausedRef.current) {
+        // Keep the raf loop alive but don't advance frames
+        rafRef.current = requestAnimationFrame(tick)
+        return
+      }
+
       if (!lastTimeRef.current) {
         lastTimeRef.current = timestamp
       }
@@ -53,7 +68,6 @@ export function useAnimPlayer(config: AnimConfig | null, reloadKey?: number): Us
       const elapsed = timestamp - lastTimeRef.current
 
       if (elapsed >= interval) {
-        // 扣除多余时间，避免帧漂移
         lastTimeRef.current = timestamp - (elapsed % interval)
         frameRef.current += 1
 
@@ -61,7 +75,6 @@ export function useAnimPlayer(config: AnimConfig | null, reloadKey?: number): Us
           if (config!.loop) {
             frameRef.current = 0
           } else {
-            // 非循环：停在最后一帧
             frameRef.current = config!.frameCount - 1
             setCurrentFrame(frameRef.current)
             setIsPlaying(false)
@@ -82,13 +95,11 @@ export function useAnimPlayer(config: AnimConfig | null, reloadKey?: number): Us
     }
   }, [config, reloadKey])
 
-  /** 根据帧索引构建图片路径（带 cache busting） */
   const buildFrameSrc = useCallback(
     (frameIndex: number): string | null => {
       if (!config) return null
       const num = String(frameIndex + 1).padStart(4, '0')
       const filename = config.framePattern.replace('{}', num)
-      // 使用 reloadKey 作为 cache buster，确保切换配置后浏览器不使用旧缓存
       return `${config.framesDir}/${filename}?v=${reloadKey ?? 0}`
     },
     [config, reloadKey]
@@ -100,5 +111,7 @@ export function useAnimPlayer(config: AnimConfig | null, reloadKey?: number): Us
     currentFrame,
     totalFrames: config?.frameCount ?? 0,
     restart,
+    pause,
+    resume,
   }
 }
