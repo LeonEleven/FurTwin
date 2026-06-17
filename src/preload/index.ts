@@ -105,4 +105,12 @@ contextBridge.exposeInMainWorld('controlAPI', {
   openPath: (path: string): Promise<{ ok: boolean; error?: string }> => {
     return ipcRenderer.invoke(IPC_CHANNELS.OPEN_PATH, path)
   },
+  // --- 历史生成结果 ---
+  listGeneratedAssets: (): Promise<Array<{
+    id: string; path: string; frameCount: number;
+    frameWidth: number; frameHeight: number;
+    format: string; modifiedAt: number
+  }>> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.LIST_GENERATED_ASSETS)
+  },
 })

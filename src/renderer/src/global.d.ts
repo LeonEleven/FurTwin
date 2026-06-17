@@ -53,6 +53,11 @@ declare global {
       applyToPreview: (outputDir: string) => void
       restoreDemo: () => void
       openPath: (path: string) => Promise<{ ok: boolean; error?: string }>
+      listGeneratedAssets: () => Promise<Array<{
+        id: string; path: string; frameCount: number;
+        frameWidth: number; frameHeight: number;
+        format: string; modifiedAt: number
+      }>>
     }
   }
 }

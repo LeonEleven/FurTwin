@@ -2,6 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 
 type Status = 'idle' | 'processing' | 'success' | 'error'
 
+interface GeneratedAsset {
+  id: string; path: string; frameCount: number;
+  frameWidth: number; frameHeight: number;
+  format: string; modifiedAt: number
+}
+
 interface ExtractResult {
   outputDir: string
   frameCount: number
@@ -30,12 +36,25 @@ export function App() {
   const [errorMsg, setErrorMsg] = useState('')
   const [logs, setLogs] = useState('')
   const [extractResult, setExtractResult] = useState<ExtractResult | null>(null)
+  const [history, setHistory] = useState<GeneratedAsset[]>([])
 
   const logRef = useRef<HTMLDivElement>(null)
+
+  const refreshHistory = useCallback(async () => {
+    try {
+      const assets = await window.controlAPI.listGeneratedAssets()
+      setHistory(assets.slice(0, 10))
+    } catch {}
+  }, [])
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [logs])
+
+  // Load history on mount and after successful extraction
+  useEffect(() => {
+    refreshHistory()
+  }, [refreshHistory, status])
 
   useEffect(() => {
     const offLog = window.controlAPI.onExtractLog((log) => {
@@ -116,6 +135,16 @@ export function App() {
     const res = await window.controlAPI.openPath(extractResult.outputDir)
     if (!res.ok) console.warn('[renderer] openPath failed:', res.error)
   }, [extractResult])
+
+  const handleApplyHistory = useCallback((asset: GeneratedAsset) => {
+    console.log('[renderer] apply history:', asset.id)
+    window.controlAPI.applyToPreview(asset.path)
+  }, [])
+
+  const handleOpenHistoryDir = useCallback(async (asset: GeneratedAsset) => {
+    const res = await window.controlAPI.openPath(asset.path)
+    if (!res.ok) console.warn('[renderer] openPath failed:', res.error)
+  }, [])
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '6px 8px', border: '1px solid #ccc',
@@ -248,6 +277,48 @@ export function App() {
               padding: '8px 20px', fontSize: 13, fontWeight: 600,
               cursor: 'pointer', backgroundColor: '#607d8b', color: '#fff', border: 'none', borderRadius: 4,
             }}>打开输出目录</button>
+          </div>
+        </div>
+      )}
+
+      {/* 历史生成结果 */}
+      {history.length > 0 && (
+        <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 13 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <p style={{ fontWeight: 600, margin: 0 }}>历史生成结果</p>
+            <button onClick={refreshHistory} style={{
+              padding: '2px 8px', fontSize: 11, cursor: 'pointer',
+              backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3,
+            }}>刷新</button>
+          </div>
+          <div style={{ maxHeight: 240, overflow: 'auto' }}>
+            {history.map((asset) => {
+              const date = new Date(asset.modifiedAt)
+              const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
+              return (
+                <div key={asset.id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '6px 0', borderBottom: '1px solid #e0e0e0',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontWeight: 500 }}>{timeStr}</span>
+                    <span style={{ color: '#888', marginLeft: 8 }}>
+                      {asset.frameCount} 帧 · {asset.frameWidth}x{asset.frameHeight} · {asset.format}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 8 }}>
+                    <button onClick={() => handleApplyHistory(asset)} style={{
+                      padding: '3px 10px', fontSize: 11, cursor: 'pointer',
+                      backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: 3,
+                    }}>应用</button>
+                    <button onClick={() => handleOpenHistoryDir(asset)} style={{
+                      padding: '3px 10px', fontSize: 11, cursor: 'pointer',
+                      backgroundColor: '#607d8b', color: '#fff', border: 'none', borderRadius: 3,
+                    }}>打开</button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
