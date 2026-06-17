@@ -1,12 +1,11 @@
 /**
  * Pet window shape management
  * - Per-frame scanline shape for precise alpha boundary
- * - Union shape fallback
- * - DPI coordinate mode testing
+ * - Shape cache for fast resource switching
  */
 
 import { ipcMain, BrowserWindow, Rectangle, screen } from 'electron'
-import { readFileSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { PNG } from 'pngjs'
 import { IPC_CHANNELS } from '../../shared/types'
@@ -14,17 +13,15 @@ import { IPC_CHANNELS } from '../../shared/types'
 const ALPHA_THRESHOLD = 48
 const MERGE_TOLERANCE = 1
 const MAX_RECTS = 1000
+const SHAPE_CACHE_FILE = 'shape-cache.json'
+const SHAPE_CACHE_VERSION = 1
 
-// A/B test: 'dip' = local coordinates, 'physical' = scaled by display scaleFactor
 let SHAPE_COORD_MODE: 'dip' | 'physical' = 'dip'
 
-// Per-frame shape cache
 let perFrameRects: Rectangle[][] = []
 let cachedFrameWidth = 0
 let cachedFrameHeight = 0
 let cachedScale = 1
-let cachedFrameDir = ''
-let cachedFramePattern = ''
 
 function getPetWindow(): BrowserWindow | null {
   return BrowserWindow.getAllWindows().find(w => {
@@ -94,7 +91,6 @@ function clampRects(rects: Rectangle[], winW: number, winH: number): Rectangle[]
   return valid
 }
 
-/** Compute scanline rects for a single PNG frame */
 function computeFrameShape(filePath: string, scale: number): Rectangle[] {
   const buf = readFileSync(filePath)
   const png = PNG.sync.read(buf)
@@ -106,7 +102,6 @@ function computeFrameShape(filePath: string, scale: number): Rectangle[] {
   }
   const rows = extractRunsFromMask(mask, W, H)
   let rects = mergeRunsToRects(rows, MERGE_TOLERANCE)
-  // Scale to window coordinates
   rects = rects.map(r => ({
     x: Math.floor(r.x * scale),
     y: Math.floor(r.y * scale),
@@ -121,7 +116,6 @@ function resolveFrameDir(framesDir: string): string {
   return join(process.cwd(), 'src/renderer/public', framesDir.replace(/^\.\//, ''))
 }
 
-/** Get display scaleFactor for the pet window */
 function getDisplayScaleFactor(): number {
   const petWin = getPetWindow()
   if (!petWin || petWin.isDestroyed()) return 1
@@ -130,7 +124,6 @@ function getDisplayScaleFactor(): number {
   return display.scaleFactor
 }
 
-/** Apply coord mode transform to rects */
 function applyCoordMode(rects: Rectangle[]): Rectangle[] {
   if (SHAPE_COORD_MODE === 'physical') {
     const sf = getDisplayScaleFactor()
@@ -146,8 +139,69 @@ function applyCoordMode(rects: Rectangle[]): Rectangle[] {
   return rects
 }
 
+// ─── Shape Cache ─────────────────────────────────────────
+
+interface ShapeCache {
+  version: number
+  frameCount: number
+  frameWidth: number
+  frameHeight: number
+  scale: number
+  coordMode: string
+  perFrameRects: Rectangle[][]
+  createdAt: number
+}
+
+function getCachePath(frameDir: string): string {
+  return join(frameDir, SHAPE_CACHE_FILE)
+}
+
+function tryLoadCache(frameDir: string, frameCount: number, frameWidth: number, frameHeight: number, scale: number): Rectangle[][] | null {
+  const cachePath = getCachePath(frameDir)
+  if (!existsSync(cachePath)) return null
+
+  try {
+    const raw = readFileSync(cachePath, 'utf-8')
+    const cache: ShapeCache = JSON.parse(raw)
+
+    if (cache.version !== SHAPE_CACHE_VERSION) return null
+    if (cache.frameCount !== frameCount) return null
+    if (cache.frameWidth !== frameWidth) return null
+    if (cache.frameHeight !== frameHeight) return null
+    if (cache.scale !== scale) return null
+    if (!Array.isArray(cache.perFrameRects) || cache.perFrameRects.length !== frameCount) return null
+
+    console.log(`[shape] cache HIT: ${cachePath} (${cache.perFrameRects.length} frames, created=${new Date(cache.createdAt).toISOString()})`)
+    return cache.perFrameRects
+  } catch (e) {
+    console.warn('[shape] cache read failed:', e)
+    return null
+  }
+}
+
+function saveCache(frameDir: string, frameCount: number, frameWidth: number, frameHeight: number, scale: number, rects: Rectangle[][]): void {
+  const cachePath = getCachePath(frameDir)
+  const cache: ShapeCache = {
+    version: SHAPE_CACHE_VERSION,
+    frameCount,
+    frameWidth,
+    frameHeight,
+    scale,
+    coordMode: SHAPE_COORD_MODE,
+    perFrameRects: rects,
+    createdAt: Date.now(),
+  }
+  try {
+    writeFileSync(cachePath, JSON.stringify(cache), 'utf-8')
+    console.log(`[shape] cache SAVED: ${cachePath}`)
+  } catch (e) {
+    console.warn('[shape] cache write failed:', e)
+  }
+}
+
+// ─── IPC Handlers ────────────────────────────────────────
+
 export function setupPetShape(): void {
-  // Pre-compute per-frame shapes
   ipcMain.on(IPC_CHANNELS.COMPUTE_PET_SHAPE, (_event, payload: {
     framesDir: string; framePattern: string; frameCount: number;
     frameWidth: number; frameHeight: number; scale: number
@@ -157,16 +211,26 @@ export function setupPetShape(): void {
 
     const frameDir = resolveFrameDir(payload.framesDir)
     const bounds = petWin.getBounds()
-    const sf = getDisplayScaleFactor()
-
-    console.log(`[shape] precompute: dir=${frameDir} frames=${payload.frameCount} frame=${payload.frameWidth}x${payload.frameHeight} scale=${payload.scale} window=${bounds.width}x${bounds.height} displayScale=${sf}`)
-    console.log(`[shape] coordMode=${SHAPE_COORD_MODE}`)
 
     cachedFrameWidth = payload.frameWidth
     cachedFrameHeight = payload.frameHeight
     cachedScale = payload.scale
-    cachedFrameDir = frameDir
-    cachedFramePattern = payload.framePattern
+
+    // Try cache first
+    const cached = tryLoadCache(frameDir, payload.frameCount, payload.frameWidth, payload.frameHeight, payload.scale)
+    if (cached) {
+      perFrameRects = cached.map(rects => clampRects(rects, bounds.width, bounds.height))
+      const rects = applyCoordMode(perFrameRects[0] ?? [])
+      try { petWin.setShape(rects) } catch {}
+      console.log(`[shape] applied from cache: frame=0 rects=${rects.length}`)
+      petWin.webContents.send(IPC_CHANNELS.PET_SHAPE_UPDATED, {
+        rects: rects.length, activeBlocks: perFrameRects.length, totalBlocks: payload.frameCount,
+      })
+      return
+    }
+
+    // Cache miss: compute
+    console.log(`[shape] cache MISS, computing: dir=${frameDir} frames=${payload.frameCount}`)
 
     try {
       perFrameRects = []
@@ -187,7 +251,9 @@ export function setupPetShape(): void {
       const avgRects = Math.round(totalRects / payload.frameCount)
       console.log(`[shape] precomputed ${perFrameRects.length} frames, avg_rects=${avgRects}`)
 
-      // Apply frame 0 shape
+      // Save cache
+      saveCache(frameDir, payload.frameCount, payload.frameWidth, payload.frameHeight, payload.scale, perFrameRects)
+
       if (perFrameRects.length > 0) {
         const rects = applyCoordMode(perFrameRects[0])
         try { petWin.setShape(rects) } catch (e) { console.warn('[shape] setShape failed:', e) }
@@ -204,35 +270,23 @@ export function setupPetShape(): void {
     }
   })
 
-  // Apply shape for specific frame (called when animation frame changes)
   ipcMain.on(IPC_CHANNELS.APPLY_FRAME_SHAPE, (_event, frameIndex: number) => {
     const petWin = getPetWindow()
     if (!petWin || petWin.isDestroyed()) return
-
     if (frameIndex < 0 || frameIndex >= perFrameRects.length) return
-
     const rects = applyCoordMode(perFrameRects[frameIndex])
-    try {
-      petWin.setShape(rects)
-    } catch (e) {
-      console.warn(`[shape] apply frame=${frameIndex} failed:`, e)
-    }
+    try { petWin.setShape(rects) } catch {}
   })
 
-  // Lightweight surface refresh
   ipcMain.on(IPC_CHANNELS.PET_SURFACE_REFRESH, () => {
     const petWin = getPetWindow()
     if (!petWin || petWin.isDestroyed()) return
-
-    // Reapply current frame shape if available
     if (perFrameRects.length > 0) {
-      // Use frame 0 as default refresh target
       const rects = applyCoordMode(perFrameRects[0])
       try { petWin.setShape(rects) } catch {}
     }
   })
 
-  // Clear shape
   ipcMain.on(IPC_CHANNELS.CLEAR_PET_SHAPE, () => {
     const petWin = getPetWindow()
     if (petWin && !petWin.isDestroyed()) {
