@@ -101,4 +101,8 @@ contextBridge.exposeInMainWorld('controlAPI', {
   restoreDemo: () => {
     ipcRenderer.send(IPC_CHANNELS.RESTORE_DEMO)
   },
+  // --- 打开目录 ---
+  openPath: (path: string): Promise<{ ok: boolean; error?: string }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.OPEN_PATH, path)
+  },
 })

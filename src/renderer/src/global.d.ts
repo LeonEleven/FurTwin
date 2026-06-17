@@ -52,6 +52,7 @@ declare global {
       onExtractError: (callback: (err: { code: number; message: string }) => void) => () => void
       applyToPreview: (outputDir: string) => void
       restoreDemo: () => void
+      openPath: (path: string) => Promise<{ ok: boolean; error?: string }>
     }
   }
 }

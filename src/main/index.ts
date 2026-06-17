@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu } from 'electron'
 import { createPetWindow, setupWindowResize, setupPetDrag, setupContextMenu } from './windows/petWindow'
 import { createControlPanel, setQuitting, showControlPanel } from './windows/controlPanel'
 import { setupSelectVideo, setupExtractFrames } from './ipc/extract'
+import { setupOpenPath } from './ipc/openPath'
 import { setupPreview } from './ipc/preview'
 import { setupPetShape } from './ipc/petShape'
 
@@ -22,6 +23,7 @@ app.whenReady().then(() => {
   setupExtractFrames()
   setupPreview()
   setupPetShape()
+  setupOpenPath()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

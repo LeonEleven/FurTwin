@@ -111,6 +111,12 @@ export function App() {
     window.controlAPI.restoreDemo()
   }, [])
 
+  const handleOpenOutputDir = useCallback(async () => {
+    if (!extractResult?.outputDir) return
+    const res = await window.controlAPI.openPath(extractResult.outputDir)
+    if (!res.ok) console.warn('[renderer] openPath failed:', res.error)
+  }, [extractResult])
+
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '6px 8px', border: '1px solid #ccc',
     borderRadius: 4, fontSize: 13, fontFamily: 'inherit',
@@ -229,7 +235,7 @@ export function App() {
           {extractResult.trimWidth > 800 && (
             <p style={{ color: '#e65100', marginTop: 4 }}>⚠ 裁剪后画布仍然较大，可能遮挡桌面。</p>
           )}
-          <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+          <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={handleApplyPreview} style={{
               padding: '8px 20px', fontSize: 13, fontWeight: 600,
               cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: 4,
@@ -238,6 +244,10 @@ export function App() {
               padding: '8px 20px', fontSize: 13, fontWeight: 600,
               cursor: 'pointer', backgroundColor: '#ff9800', color: '#fff', border: 'none', borderRadius: 4,
             }}>恢复 Demo 预览</button>
+            <button onClick={handleOpenOutputDir} style={{
+              padding: '8px 20px', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', backgroundColor: '#607d8b', color: '#fff', border: 'none', borderRadius: 4,
+            }}>打开输出目录</button>
           </div>
         </div>
       )}
