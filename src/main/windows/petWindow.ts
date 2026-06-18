@@ -3,7 +3,7 @@ import { join } from 'path'
 import { existsSync, readdirSync, statSync } from 'fs'
 import { IPC_CHANNELS, type DragPayload } from '../../shared/types'
 import { isControlPanelVisible, showControlPanel, hideControlPanel } from './controlPanel'
-import { loadAssetInfo } from '../utils/assetInfo'
+import { loadAssetInfo, getActiveAssetId } from '../utils/assetInfo'
 
 const isDev = !app.isPackaged
 const GENERATED_DIR = join(process.cwd(), 'src/renderer/public/assets/actions/idle/generated')
@@ -16,11 +16,13 @@ interface AssetEntry {
   id: string
   path: string
   name: string
+  isActive: boolean
 }
 
 /** Scan generated directory for assets using shared loadAssetInfo */
 function scanAssets(): AssetEntry[] {
   if (!existsSync(GENERATED_DIR)) return []
+  const activeId = getActiveAssetId()
   const entries = readdirSync(GENERATED_DIR, { withFileTypes: true })
   const assets: AssetEntry[] = []
 
@@ -30,7 +32,8 @@ function scanAssets(): AssetEntry[] {
     try {
       const info = loadAssetInfo(dirPath, entry.name)
       if (info) {
-        assets.push({ id: entry.name, path: dirPath, name: info.name })
+        const isActive = activeId !== null && activeId === entry.name
+        assets.push({ id: entry.name, path: dirPath, name: info.name, isActive })
       }
     } catch {}
   }
@@ -184,7 +187,7 @@ export function setupContextMenu(): void {
     // Build action submenu from generated assets
     const actionSubmenu: Electron.MenuItemConstructorOptions[] = assets.length > 0
       ? assets.map(asset => ({
-          label: asset.name,
+          label: asset.isActive ? `✓ ${asset.name}` : asset.name,
           click: () => {
             ipcMain.emit(IPC_CHANNELS.SWITCH_TO_ASSET, null, { assetPath: asset.path })
           },

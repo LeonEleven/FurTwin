@@ -38,6 +38,7 @@ interface GeneratedAssetInfo {
   format: string
   modifiedAt: number
   displayScale: number
+  isActive?: boolean
 }
 
 declare global {

@@ -5,7 +5,8 @@ type Status = 'idle' | 'processing' | 'success' | 'error'
 interface GeneratedAsset {
   id: string; path: string; name: string; sourceVideo: string;
   createdAt: string; frameCount: number; frameWidth: number;
-  frameHeight: number; format: string; modifiedAt: number; displayScale: number
+  frameHeight: number; format: string; modifiedAt: number; displayScale: number;
+  isActive?: boolean
 }
 
 interface ExtractResult {
@@ -90,7 +91,10 @@ export function App() {
     window.controlAPI.applyToPreview(extractResult.outputDir, 0.5)
   }, [extractResult])
 
-  const handleRestoreDemo = useCallback(() => { window.controlAPI.restoreDemo() }, [])
+  const handleRestoreDemo = useCallback(() => {
+    window.controlAPI.restoreDemo()
+    setTimeout(() => refreshAssets(), 300)
+  }, [refreshAssets])
 
   const handleOpenOutputDir = useCallback(async () => {
     if (!extractResult?.outputDir) return
@@ -100,7 +104,9 @@ export function App() {
 
   const handleApplyAsset = useCallback((asset: GeneratedAsset) => {
     window.controlAPI.switchToAsset(asset.path)
-  }, [])
+    // Delay refresh to let local.config.json be written
+    setTimeout(() => refreshAssets(), 300)
+  }, [refreshAssets])
 
   const handleOpenAssetDir = useCallback(async (asset: GeneratedAsset) => {
     const res = await window.controlAPI.openPath(asset.path)
@@ -265,6 +271,10 @@ export function App() {
                 <div key={asset.id} style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   padding: '6px 0', borderBottom: '1px solid #e0e0e0', gap: 8,
+                  backgroundColor: asset.isActive ? '#e8f5e9' : 'transparent',
+                  borderRadius: asset.isActive ? 4 : 0,
+                  paddingLeft: asset.isActive ? 6 : 0,
+                  paddingRight: asset.isActive ? 6 : 0,
                 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     {isRenaming ? (
@@ -278,6 +288,7 @@ export function App() {
                     ) : (
                       <>
                         <span style={{ fontWeight: 500 }}>{asset.name}</span>
+                        {asset.isActive && <span style={{ marginLeft: 6, fontSize: 11, color: '#4caf50', fontWeight: 600 }}>当前使用</span>}
                         <span style={{ color: '#888', marginLeft: 8 }}>
                           {timeStr} · {asset.frameCount}帧 · {asset.frameWidth}x{asset.frameHeight} · {asset.format}
                         </span>

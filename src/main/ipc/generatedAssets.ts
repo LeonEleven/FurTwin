@@ -2,16 +2,17 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { readdirSync, statSync, existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join, resolve } from 'path'
 import { IPC_CHANNELS } from '../../shared/types'
-import { loadAssetInfo, type AssetInfo } from '../utils/assetInfo'
+import { loadAssetInfo, getActiveAssetId, type AssetInfo } from '../utils/assetInfo'
 
 const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
 const METADATA_FILE = 'asset-metadata.json'
 
-function scanGeneratedDir(): AssetInfo[] {
+function scanGeneratedDir(): (AssetInfo & { isActive: boolean; modifiedAt: number })[] {
   if (!existsSync(GENERATED_DIR)) return []
 
+  const activeId = getActiveAssetId()
   const entries = readdirSync(GENERATED_DIR, { withFileTypes: true })
-  const assets: AssetInfo[] = []
+  const assets: (AssetInfo & { isActive: boolean; modifiedAt: number })[] = []
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
@@ -19,15 +20,14 @@ function scanGeneratedDir(): AssetInfo[] {
     try {
       const info = loadAssetInfo(dirPath, entry.name)
       if (info) {
-        // Attach modifiedAt for sorting (not part of AssetInfo, used locally)
         const stat = statSync(dirPath)
-        ;(info as any).modifiedAt = stat.mtimeMs
-        assets.push(info)
+        const isActive = activeId !== null && activeId === entry.name
+        assets.push({ ...info, isActive, modifiedAt: stat.mtimeMs })
       }
     } catch {}
   }
 
-  assets.sort((a: any, b: any) => (b.modifiedAt || 0) - (a.modifiedAt || 0))
+  assets.sort((a, b) => b.modifiedAt - a.modifiedAt)
   return assets
 }
 

@@ -138,3 +138,29 @@ export function toFramesDir(assetPath: string): string {
   const relative = assetPath.replace(publicDir, '').replace(/\\/g, '/')
   return '.' + relative
 }
+
+const LOCAL_CONFIG_PATH = resolve('src/renderer/public/assets/actions/idle/local.config.json')
+
+/**
+ * Get the currently active generated asset ID from local.config.json.
+ * Returns the asset directory name (e.g. "1781754837975") or null if in demo mode.
+ *
+ * Logic:
+ * - Read local.config.json framesDir
+ * - Normalize path separators to /
+ * - Match generated/<id> pattern
+ * - If framesDir points to demo frames (not generated/), return null
+ */
+export function getActiveAssetId(): string | null {
+  if (!existsSync(LOCAL_CONFIG_PATH)) return null
+  try {
+    const config = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+    const framesDir: string = config.framesDir || ''
+    const normalized = framesDir.replace(/\\/g, '/')
+    // Match: ./assets/actions/idle/generated/<id>
+    const match = normalized.match(/generated\/([^/]+)/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
