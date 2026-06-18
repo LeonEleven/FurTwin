@@ -1,13 +1,48 @@
 import { app, BrowserWindow, screen, ipcMain, Menu } from 'electron'
 import { join } from 'path'
+import { existsSync, readdirSync, statSync } from 'fs'
 import { IPC_CHANNELS, type DragPayload } from '../../shared/types'
 import { isControlPanelVisible, showControlPanel, hideControlPanel } from './controlPanel'
+import { loadAssetInfo } from '../utils/assetInfo'
 
 const isDev = !app.isPackaged
+const GENERATED_DIR = join(process.cwd(), 'src/renderer/public/assets/actions/idle/generated')
 
 let petWindow: BrowserWindow | null = null
 let moveDebounce: ReturnType<typeof setTimeout> | null = null
 let lastDisplayId: number | null = null
+
+interface AssetEntry {
+  id: string
+  path: string
+  name: string
+}
+
+/** Scan generated directory for assets using shared loadAssetInfo */
+function scanAssets(): AssetEntry[] {
+  if (!existsSync(GENERATED_DIR)) return []
+  const entries = readdirSync(GENERATED_DIR, { withFileTypes: true })
+  const assets: AssetEntry[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const dirPath = join(GENERATED_DIR, entry.name)
+    try {
+      const info = loadAssetInfo(dirPath, entry.name)
+      if (info) {
+        assets.push({ id: entry.name, path: dirPath, name: info.name })
+      }
+    } catch {}
+  }
+
+  assets.sort((a, b) => {
+    const sa = statSync(a.path).mtimeMs
+    const sb = statSync(b.path).mtimeMs
+    return sb - sa
+  })
+
+  return assets
+}
 
 export function createPetWindow(): BrowserWindow {
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
@@ -48,7 +83,6 @@ export function createPetWindow(): BrowserWindow {
     petWindow?.showInactive()
   })
 
-  // Cross-screen handling
   petWindow.on('moved', () => {
     if (!petWindow || petWindow.isDestroyed()) return
     const bounds = petWindow.getBounds()
@@ -91,24 +125,16 @@ export function setupWindowResize(): void {
     try {
       const [cx, cy] = petWindow.getPosition()
       const [cw, ch] = petWindow.getSize()
-
-      // Bottom-center anchor: keep center x and bottom y stable
       const centerX = cx + Math.round(cw / 2)
       const bottomY = cy + ch
       let newX = centerX - Math.round(w / 2)
       let newY = bottomY - h
-
-      // Clamp to display work area (avoid taskbar)
       const display = screen.getDisplayMatching({ x: cx, y: cy, width: cw, height: ch })
       const wa = display.workArea
       const clampedX = Math.max(wa.x, Math.min(newX, wa.x + wa.width - w))
       const clampedY = Math.max(wa.y, Math.min(newY, wa.y + wa.height - h))
-
-      console.log(`[pet] RESIZE_WINDOW bottom-anchor old=${cw}x${ch}+${cx}+${cy} new=${w}x${h} clamped=${clampedX}+${clampedY}`)
       petWindow.setBounds({ x: clampedX, y: clampedY, width: w, height: h })
-    } catch (e) {
-      console.warn('[pet] RESIZE_WINDOW failed:', e)
-    }
+    } catch {}
   })
 }
 
@@ -153,6 +179,18 @@ export function setupContextMenu(): void {
     if (!petWindow || petWindow.isDestroyed()) return
 
     const visible = isControlPanelVisible()
+    const assets = scanAssets()
+
+    // Build action submenu from generated assets
+    const actionSubmenu: Electron.MenuItemConstructorOptions[] = assets.length > 0
+      ? assets.map(asset => ({
+          label: asset.name,
+          click: () => {
+            ipcMain.emit(IPC_CHANNELS.SWITCH_TO_ASSET, null, { assetPath: asset.path })
+          },
+        }))
+      : [{ label: '（暂无动作）', enabled: false }]
+
     const template: Electron.MenuItemConstructorOptions[] = [
       {
         label: visible ? '隐藏控制面板' : '显示控制面板',
@@ -163,7 +201,20 @@ export function setupContextMenu(): void {
       },
       { type: 'separator' },
       {
+        label: '切换动作',
+        submenu: actionSubmenu,
+      },
+      { type: 'separator' },
+      {
         label: '重新加载动画',
+        click: () => {
+          if (petWindow && !petWindow.isDestroyed()) {
+            petWindow.webContents.send(IPC_CHANNELS.MENU_ACTION, 'reload-anim')
+          }
+        },
+      },
+      {
+        label: '恢复 Demo 预览',
         click: () => {
           if (petWindow && !petWindow.isDestroyed()) {
             petWindow.webContents.send(IPC_CHANNELS.MENU_ACTION, 'reload-anim')

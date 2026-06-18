@@ -159,7 +159,7 @@ export function setupExtractFrames(): void {
         }
         try {
           writeFileSync(join(outputDir, 'asset-metadata.json'), JSON.stringify(metadata, null, 2), 'utf-8')
-          console.log(`[extract] metadata saved: name=${sourceName}`)
+          console.log(`[extract] metadata saved: dir=${outputDir}`)
         } catch (e) {
           console.warn('[extract] metadata save failed:', e)
         }

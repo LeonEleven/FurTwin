@@ -122,4 +122,8 @@ contextBridge.exposeInMainWorld('controlAPI', {
   deleteAsset: (path: string): Promise<{ ok: boolean; error?: string }> => {
     return ipcRenderer.invoke(IPC_CHANNELS.DELETE_ASSET, { path })
   },
+  // --- Switch to asset as current preview ---
+  switchToAsset: (assetPath: string) => {
+    ipcRenderer.send(IPC_CHANNELS.SWITCH_TO_ASSET, { assetPath })
+  },
 })

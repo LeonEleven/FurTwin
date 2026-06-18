@@ -4,6 +4,7 @@ import { createControlPanel, setQuitting, showControlPanel } from './windows/con
 import { setupSelectVideo, setupExtractFrames } from './ipc/extract'
 import { setupOpenPath } from './ipc/openPath'
 import { setupGeneratedAssets } from './ipc/generatedAssets'
+import { setupActionLib } from './ipc/actionLib'
 import { setupPreview } from './ipc/preview'
 import { setupPetShape } from './ipc/petShape'
 
@@ -26,6 +27,7 @@ app.whenReady().then(() => {
   setupPetShape()
   setupOpenPath()
   setupGeneratedAssets()
+  setupActionLib()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

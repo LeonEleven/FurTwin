@@ -92,7 +92,7 @@ function PetApp() {
     loadConfig()
   }, [loadConfig])
 
-  // 右键菜单 -> 重新加载动画
+  // 右键菜单 → 重新加载动画
   useEffect(() => {
     const removeListener = window.petAPI.onMenuAction((action) => {
       if (action === 'reload-anim') {

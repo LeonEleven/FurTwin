@@ -71,6 +71,7 @@ declare global {
       saveAssetDisplayScale: (path: string, displayScale: number) => void
       renameAsset: (path: string, name: string) => void
       deleteAsset: (path: string) => Promise<{ ok: boolean; error?: string }>
+      switchToAsset: (assetPath: string) => void
     }
   }
 }
