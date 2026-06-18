@@ -1,24 +1,26 @@
-import { ipcMain } from 'electron'
-import { readdirSync, readFileSync, statSync, existsSync, writeFileSync } from 'fs'
+import { ipcMain, BrowserWindow } from 'electron'
+import { readdirSync, readFileSync, statSync, existsSync, writeFileSync, rmSync } from 'fs'
 import { join, resolve } from 'path'
 import { IPC_CHANNELS } from '../../shared/types'
 
 const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
 const METADATA_FILE = 'asset-metadata.json'
 
-interface GeneratedAsset {
-  id: string
-  path: string
+export interface AssetMetadata {
+  name: string
+  sourceVideo: string
+  createdAt: string
   frameCount: number
   frameWidth: number
   frameHeight: number
   format: string
-  modifiedAt: number
   displayScale: number
 }
 
-interface AssetMetadata {
-  displayScale: number
+export interface GeneratedAsset extends AssetMetadata {
+  id: string
+  path: string
+  modifiedAt: number
 }
 
 function getPngDimensions(filePath: string): { width: number; height: number } | null {
@@ -31,7 +33,7 @@ function getPngDimensions(filePath: string): { width: number; height: number } |
   return null
 }
 
-function readMetadata(dirPath: string): AssetMetadata | null {
+function readMetadata(dirPath: string): Partial<AssetMetadata> | null {
   const metaPath = join(dirPath, METADATA_FILE)
   if (!existsSync(metaPath)) return null
   try {
@@ -66,7 +68,7 @@ function scanGeneratedDir(): GeneratedAsset[] {
       let format = 'png'
 
       for (const fmt of ['png', 'webp']) {
-        const files = readdirSync(dirPath).filter(f => f.endsWith(`.${fmt}`)).sort()
+        const files = readdirSync(dirPath).filter(f => f.endsWith(`.${fmt}`) && !f.startsWith('.')).sort()
         if (files.length > 0) {
           frameCount = files.length
           format = fmt
@@ -81,12 +83,15 @@ function scanGeneratedDir(): GeneratedAsset[] {
         assets.push({
           id: entry.name,
           path: dirPath,
-          frameCount,
-          frameWidth,
-          frameHeight,
-          format,
-          modifiedAt: stat.mtimeMs,
+          name: meta?.name || 'unnamed',
+          sourceVideo: meta?.sourceVideo || '',
+          createdAt: meta?.createdAt || new Date(stat.birthtimeMs).toISOString(),
+          frameCount: meta?.frameCount || frameCount,
+          frameWidth: meta?.frameWidth || frameWidth,
+          frameHeight: meta?.frameHeight || frameHeight,
+          format: meta?.format || format,
           displayScale: meta?.displayScale ?? 0.5,
+          modifiedAt: stat.mtimeMs,
         })
       }
     } catch {}
@@ -97,20 +102,91 @@ function scanGeneratedDir(): GeneratedAsset[] {
 }
 
 export function setupGeneratedAssets(): void {
+  // List all generated assets
   ipcMain.handle(IPC_CHANNELS.LIST_GENERATED_ASSETS, () => {
     try {
-      const assets = scanGeneratedDir()
-      console.log(`[generated] found ${assets.length} assets`)
-      return assets
+      return scanGeneratedDir()
     } catch (e) {
       console.warn('[generated] scan failed:', e)
       return []
     }
   })
 
+  // Save displayScale for an asset
   ipcMain.on(IPC_CHANNELS.SAVE_ASSET_DISPLAY_SCALE, (_event, payload: { path: string; displayScale: number }) => {
     if (!payload?.path || !Number.isFinite(payload.displayScale)) return
-    writeMetadata(payload.path, { displayScale: payload.displayScale })
-    console.log(`[generated] saved displayScale=${payload.displayScale} to ${payload.path}`)
+    const existing = readMetadata(payload.path) || {}
+    const meta: AssetMetadata = {
+      name: existing.name || 'unnamed',
+      sourceVideo: existing.sourceVideo || '',
+      createdAt: existing.createdAt || new Date().toISOString(),
+      frameCount: existing.frameCount || 0,
+      frameWidth: existing.frameWidth || 0,
+      frameHeight: existing.frameHeight || 0,
+      format: existing.format || 'png',
+      displayScale: payload.displayScale,
+    }
+    writeMetadata(payload.path, meta)
+  })
+
+  // Rename an asset
+  ipcMain.on(IPC_CHANNELS.RENAME_ASSET, (_event, payload: { path: string; name: string }) => {
+    if (!payload?.path || !payload?.name) return
+    const existing = readMetadata(payload.path) || {}
+    const meta: AssetMetadata = {
+      name: payload.name,
+      sourceVideo: existing.sourceVideo || '',
+      createdAt: existing.createdAt || new Date().toISOString(),
+      frameCount: existing.frameCount || 0,
+      frameWidth: existing.frameWidth || 0,
+      frameHeight: existing.frameHeight || 0,
+      format: existing.format || 'png',
+      displayScale: existing.displayScale ?? 0.5,
+    }
+    writeMetadata(payload.path, meta)
+    console.log(`[generated] renamed to "${payload.name}" at ${payload.path}`)
+  })
+
+  // Delete an asset
+  ipcMain.handle(IPC_CHANNELS.DELETE_ASSET, (_event, payload: { path: string }) => {
+    if (!payload?.path || !existsSync(payload.path)) {
+      return { ok: false, error: 'path not found' }
+    }
+
+    // Safety: only allow deleting under GENERATED_DIR
+    const resolved = resolve(payload.path)
+    if (!resolved.startsWith(GENERATED_DIR)) {
+      console.warn('[generated] delete rejected: path outside generated dir')
+      return { ok: false, error: 'invalid path' }
+    }
+
+    try {
+      rmSync(resolved, { recursive: true, force: true })
+      console.log(`[generated] deleted: ${resolved}`)
+
+      // If this was the currently previewed asset, restore demo
+      const localConfigPath = resolve('src/renderer/public/assets/actions/idle/local.config.json')
+      if (existsSync(localConfigPath)) {
+        try {
+          const config = JSON.parse(readFileSync(localConfigPath, 'utf-8'))
+          if (config.framesDir && resolved.includes(config.framesDir.replace('./', '').replace(/\//g, '\\'))) {
+            const { unlinkSync } = require('fs')
+            unlinkSync(localConfigPath)
+            console.log('[generated] deleted asset was active preview, restored demo')
+            // Notify pet windows to reload
+            BrowserWindow.getAllWindows().forEach(win => {
+              if (!win.isDestroyed()) {
+                try { win.webContents.send(IPC_CHANNELS.RELOAD_ANIM) } catch {}
+              }
+            })
+          }
+        } catch {}
+      }
+
+      return { ok: true }
+    } catch (e) {
+      console.warn('[generated] delete failed:', e)
+      return { ok: false, error: String(e) }
+    }
   })
 }

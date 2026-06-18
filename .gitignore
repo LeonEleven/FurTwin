@@ -23,3 +23,6 @@ src/renderer/public/assets/actions/**/source/
 # FFmpeg 测试输出
 test_chromakey_*.png
 test_colorkey_*.png
+
+# 运行时 shape 缓存
+**/shape-cache.json

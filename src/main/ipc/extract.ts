@@ -1,7 +1,7 @@
 import { app, dialog, ipcMain, BrowserWindow } from 'electron'
 import { spawn } from 'child_process'
-import { join } from 'path'
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'fs'
+import { join, basename, extname } from 'path'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { IPC_CHANNELS, type ExtractOptions } from '../../shared/types'
 
 const isDev = !app.isPackaged
@@ -143,6 +143,25 @@ export function setupExtractFrames(): void {
         if (trimMatch) {
           result.trimWidth = Number(trimMatch[1])
           result.trimHeight = Number(trimMatch[2])
+        }
+
+        // 写入 asset-metadata.json
+        const sourceName = basename(options.input, extname(options.input))
+        const metadata = {
+          name: sourceName,
+          sourceVideo: options.input,
+          createdAt: new Date().toISOString(),
+          frameCount: result.frameCount,
+          frameWidth: result.frameWidth,
+          frameHeight: result.frameHeight,
+          format: options.format,
+          displayScale: 0.5,
+        }
+        try {
+          writeFileSync(join(outputDir, 'asset-metadata.json'), JSON.stringify(metadata, null, 2), 'utf-8')
+          console.log(`[extract] metadata saved: name=${sourceName}`)
+        } catch (e) {
+          console.warn('[extract] metadata save failed:', e)
         }
 
         console.log(`[extract] EXTRACT_DONE result=${JSON.stringify(result)}`)

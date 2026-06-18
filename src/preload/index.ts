@@ -107,13 +107,19 @@ contextBridge.exposeInMainWorld('controlAPI', {
   },
   // --- 历史生成结果 ---
   listGeneratedAssets: (): Promise<Array<{
-    id: string; path: string; frameCount: number;
-    frameWidth: number; frameHeight: number;
-    format: string; modifiedAt: number; displayScale: number
+    id: string; path: string; name: string; sourceVideo: string;
+    createdAt: string; frameCount: number; frameWidth: number;
+    frameHeight: number; format: string; modifiedAt: number; displayScale: number
   }>> => {
     return ipcRenderer.invoke(IPC_CHANNELS.LIST_GENERATED_ASSETS)
   },
   saveAssetDisplayScale: (path: string, displayScale: number) => {
     ipcRenderer.send(IPC_CHANNELS.SAVE_ASSET_DISPLAY_SCALE, { path, displayScale })
+  },
+  renameAsset: (path: string, name: string) => {
+    ipcRenderer.send(IPC_CHANNELS.RENAME_ASSET, { path, name })
+  },
+  deleteAsset: (path: string): Promise<{ ok: boolean; error?: string }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.DELETE_ASSET, { path })
   },
 })

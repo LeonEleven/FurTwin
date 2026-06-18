@@ -23,7 +23,21 @@ interface PetShapePayload {
   frameCount: number
   frameWidth: number
   frameHeight: number
-  scale: number
+  effectiveScale: number
+}
+
+interface GeneratedAssetInfo {
+  id: string
+  path: string
+  name: string
+  sourceVideo: string
+  createdAt: string
+  frameCount: number
+  frameWidth: number
+  frameHeight: number
+  format: string
+  modifiedAt: number
+  displayScale: number
 }
 
 declare global {
@@ -53,12 +67,10 @@ declare global {
       applyToPreview: (outputDir: string, displayScale?: number) => void
       restoreDemo: () => void
       openPath: (path: string) => Promise<{ ok: boolean; error?: string }>
-      listGeneratedAssets: () => Promise<Array<{
-        id: string; path: string; frameCount: number;
-        frameWidth: number; frameHeight: number;
-        format: string; modifiedAt: number; displayScale: number
-      }>>
+      listGeneratedAssets: () => Promise<GeneratedAssetInfo[]>
       saveAssetDisplayScale: (path: string, displayScale: number) => void
+      renameAsset: (path: string, name: string) => void
+      deleteAsset: (path: string) => Promise<{ ok: boolean; error?: string }>
     }
   }
 }
