@@ -219,9 +219,7 @@ export function setupContextMenu(): void {
       {
         label: '恢复 Demo 预览',
         click: () => {
-          if (petWindow && !petWindow.isDestroyed()) {
-            petWindow.webContents.send(IPC_CHANNELS.MENU_ACTION, 'reload-anim')
-          }
+          ipcMain.emit(IPC_CHANNELS.RESTORE_DEMO_MENU)
         },
       },
       { type: 'separator' },

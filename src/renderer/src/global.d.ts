@@ -26,6 +26,8 @@ interface PetShapePayload {
   effectiveScale: number
 }
 
+type ActionType = 'idle' | 'play' | 'sleep' | 'greet' | 'custom'
+
 interface GeneratedAssetInfo {
   id: string
   path: string
@@ -39,6 +41,12 @@ interface GeneratedAssetInfo {
   modifiedAt: number
   displayScale: number
   isActive?: boolean
+  actionType: ActionType
+  loop: boolean
+  isDefault: boolean
+  includeInRandom: boolean
+  interruptible: boolean
+  fpsOverride: number | null
 }
 
 declare global {
@@ -73,6 +81,13 @@ declare global {
       renameAsset: (path: string, name: string) => void
       deleteAsset: (path: string) => Promise<{ ok: boolean; error?: string }>
       switchToAsset: (assetPath: string) => void
+      setAssetPlayback: (path: string, fields: {
+        actionType?: string; loop?: boolean;
+        includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null
+      }) => void
+      setDefaultAsset: (path: string) => void
+      updateActivePlayback: (fields: { loop?: boolean; fps?: number }) => void
+      onActiveAssetChanged: (callback: () => void) => () => void
     }
   }
 }

@@ -3,6 +3,7 @@ import { writeFileSync } from 'fs'
 import { resolve } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
 import { loadAssetInfo, validateAssetInfo, toFramesDir } from '../utils/assetInfo'
+import { getControlPanel } from '../windows/controlPanel'
 
 const LOCAL_CONFIG_PATH = resolve('src/renderer/public/assets/actions/idle/local.config.json')
 
@@ -40,7 +41,7 @@ export function setupActionLib(): void {
       fps: 12,
       scale: 0.5,
       displayScale: info!.displayScale,
-      loop: true,
+      loop: info!.loop,
       frameCount: info!.frameCount,
       frameWidth: info!.frameWidth,
       frameHeight: info!.frameHeight,
@@ -59,6 +60,11 @@ export function setupActionLib(): void {
 
     setTimeout(() => {
       notifyPetReload()
+      // Also notify control panel to refresh "current use" status
+      const cp = getControlPanel()
+      if (cp && !cp.isDestroyed()) {
+        try { cp.webContents.send(IPC_CHANNELS.ACTIVE_ASSET_CHANGED) } catch {}
+      }
     }, 100)
   })
 }

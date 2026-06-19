@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu } from 'electron'
 import { createPetWindow, setupWindowResize, setupPetDrag, setupContextMenu } from './windows/petWindow'
 import { createControlPanel, setQuitting, showControlPanel } from './windows/controlPanel'
 import { setupSelectVideo, setupExtractFrames } from './ipc/extract'
+import { validateStartupConfig } from './ipc/preview'
 import { setupOpenPath } from './ipc/openPath'
 import { setupGeneratedAssets } from './ipc/generatedAssets'
 import { setupActionLib } from './ipc/actionLib'
@@ -11,6 +12,9 @@ import { setupPetShape } from './ipc/petShape'
 Menu.setApplicationMenu(null)
 
 app.whenReady().then(() => {
+  // 启动时验证上次动作是否仍可用（无效则自动回退到 Demo）
+  validateStartupConfig()
+
   // 桌宠窗口
   createPetWindow()
   setupWindowResize()

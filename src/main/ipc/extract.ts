@@ -156,6 +156,12 @@ export function setupExtractFrames(): void {
           frameHeight: result.frameHeight,
           format: options.format,
           displayScale: 0.5,
+          actionType: 'custom',
+          loop: true,
+          isDefault: false,
+          includeInRandom: true,
+          interruptible: true,
+          fpsOverride: null,
         }
         try {
           writeFileSync(join(outputDir, 'asset-metadata.json'), JSON.stringify(metadata, null, 2), 'utf-8')

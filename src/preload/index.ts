@@ -126,4 +126,25 @@ contextBridge.exposeInMainWorld('controlAPI', {
   switchToAsset: (assetPath: string) => {
     ipcRenderer.send(IPC_CHANNELS.SWITCH_TO_ASSET, { assetPath })
   },
+  // --- 动作播放属性 ---
+  setAssetPlayback: (path: string, fields: {
+    actionType?: string; loop?: boolean;
+    includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null
+  }) => {
+    ipcRenderer.send(IPC_CHANNELS.SET_ASSET_PLAYBACK, { path, ...fields })
+  },
+  // --- 设置默认动作 ---
+  setDefaultAsset: (path: string) => {
+    ipcRenderer.send(IPC_CHANNELS.SET_DEFAULT_ASSET, { path })
+  },
+  // --- 更新当前使用动作的播放属性（立即生效） ---
+  updateActivePlayback: (fields: { loop?: boolean; fps?: number }) => {
+    ipcRenderer.send(IPC_CHANNELS.UPDATE_ACTIVE_PLAYBACK, fields)
+  },
+  // --- 监听当前动作变化（来自右键菜单或恢复 Demo） ---
+  onActiveAssetChanged: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC_CHANNELS.ACTIVE_ASSET_CHANGED, handler)
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.ACTIVE_ASSET_CHANGED, handler) }
+  },
 })

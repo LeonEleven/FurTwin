@@ -7,6 +7,8 @@ interface GeneratedAsset {
   createdAt: string; frameCount: number; frameWidth: number;
   frameHeight: number; format: string; modifiedAt: number; displayScale: number;
   isActive?: boolean
+  actionType: string; loop: boolean; isDefault: boolean;
+  includeInRandom: boolean; interruptible: boolean; fpsOverride: number | null
 }
 
 interface ExtractResult {
@@ -64,6 +66,15 @@ export function App() {
     const offErr = window.controlAPI.onExtractError((err) => { setStatus('error'); setErrorMsg(err.message) })
     return () => { offLog(); offDone(); offErr() }
   }, [])
+
+  // Listen for active asset changes from right-click menu or restore demo
+  useEffect(() => {
+    const off = window.controlAPI.onActiveAssetChanged(() => {
+      console.log('[control] ACTIVE_ASSET_CHANGED received, refreshing assets')
+      refreshAssets()
+    })
+    return off
+  }, [refreshAssets])
 
   const handleSelectVideo = useCallback(async () => {
     const path = await window.controlAPI.selectVideo()
@@ -143,6 +154,44 @@ export function App() {
     const res = await window.controlAPI.deleteAsset(asset.path)
     if (res.ok) { refreshAssets() } else { alert(`删除失败：${res.error}`) }
   }, [refreshAssets])
+
+  const ACTION_TYPES: Array<{ value: string; label: string; color: string }> = [
+    { value: 'idle', label: '待机', color: '#4caf50' },
+    { value: 'play', label: '玩耍', color: '#ff9800' },
+    { value: 'sleep', label: '睡觉', color: '#7c4dff' },
+    { value: 'greet', label: '打招呼', color: '#2196f3' },
+    { value: 'custom', label: '自定义', color: '#9e9e9e' },
+  ]
+
+  const handleChangeActionType = useCallback((asset: GeneratedAsset, newType: string) => {
+    setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, actionType: newType } : a))
+    window.controlAPI.setAssetPlayback(asset.path, { actionType: newType })
+  }, [])
+
+  const handleToggleDefault = useCallback((asset: GeneratedAsset) => {
+    window.controlAPI.setDefaultAsset(asset.path)
+    if (asset.isDefault) {
+      setAssets(prev => prev.map(a => ({ ...a, isDefault: false })))
+    } else {
+      setAssets(prev => prev.map(a => ({ ...a, isDefault: a.id === asset.id })))
+    }
+  }, [])
+
+  const handleToggleLoop = useCallback((asset: GeneratedAsset) => {
+    const newVal = !asset.loop
+    setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, loop: newVal } : a))
+    window.controlAPI.setAssetPlayback(asset.path, { loop: newVal })
+    // If this is the currently active asset, also update local.config.json and notify pet
+    if (asset.isActive) {
+      window.controlAPI.updateActivePlayback({ loop: newVal })
+    }
+  }, [])
+
+  const handleToggleRandom = useCallback((asset: GeneratedAsset) => {
+    const newVal = !asset.includeInRandom
+    setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, includeInRandom: newVal } : a))
+    window.controlAPI.setAssetPlayback(asset.path, { includeInRandom: newVal })
+  }, [])
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '6px 8px', border: '1px solid #ccc',
@@ -266,47 +315,75 @@ export function App() {
               const date = new Date(asset.modifiedAt)
               const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
               const isRenaming = renamingId === asset.id
+              const typeInfo = ACTION_TYPES.find(t => t.value === asset.actionType) || ACTION_TYPES[4]
+
+              const btnStyle = (bg: string): React.CSSProperties => ({
+                padding: '3px 10px', fontSize: 11, cursor: 'pointer',
+                backgroundColor: bg, color: '#fff', border: 'none', borderRadius: 3,
+              })
 
               return (
                 <div key={asset.id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '6px 0', borderBottom: '1px solid #e0e0e0', gap: 8,
-                  backgroundColor: asset.isActive ? '#e8f5e9' : 'transparent',
-                  borderRadius: asset.isActive ? 4 : 0,
-                  paddingLeft: asset.isActive ? 6 : 0,
-                  paddingRight: asset.isActive ? 6 : 0,
+                  padding: '8px 6px', marginBottom: 6,
+                  borderBottom: '1px solid #e0e0e0',
+                  backgroundColor: asset.isActive ? '#e8f5e9' : '#fff',
+                  borderRadius: 4,
                 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* 第一行：名称 + 类型标签 + 状态标记 + 帧信息 */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
                     {isRenaming ? (
-                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <>
                         <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmRename(asset); if (e.key === 'Escape') handleCancelRename() }}
                           autoFocus style={{ padding: '2px 6px', fontSize: 12, border: '1px solid #4a90d9', borderRadius: 3, width: 140 }} />
-                        <button onClick={() => handleConfirmRename(asset)} style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: 3 }}>确定</button>
-                        <button onClick={handleCancelRename} style={{ padding: '2px 6px', fontSize: 11, cursor: 'pointer', backgroundColor: '#999', color: '#fff', border: 'none', borderRadius: 3 }}>取消</button>
-                      </div>
+                        <button onClick={() => handleConfirmRename(asset)} style={btnStyle('#4caf50')}>确定</button>
+                        <button onClick={handleCancelRename} style={btnStyle('#999')}>取消</button>
+                      </>
                     ) : (
                       <>
-                        <span style={{ fontWeight: 500 }}>{asset.name}</span>
-                        {asset.isActive && <span style={{ marginLeft: 6, fontSize: 11, color: '#4caf50', fontWeight: 600 }}>当前使用</span>}
-                        <span style={{ color: '#888', marginLeft: 8 }}>
-                          {timeStr} · {asset.frameCount}帧 · {asset.frameWidth}x{asset.frameHeight} · {asset.format}
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>{asset.name}</span>
+                        <select
+                          value={asset.actionType}
+                          onChange={(e) => handleChangeActionType(asset, e.target.value)}
+                          style={{ fontSize: 10, padding: '1px 4px', borderRadius: 3, border: '1px solid #ccc', backgroundColor: typeInfo.color, color: '#fff', cursor: 'pointer', outline: 'none' }}
+                        >
+                          {ACTION_TYPES.map(t => (
+                            <option key={t.value} value={t.value} style={{ backgroundColor: '#fff', color: '#333' }}>{t.label}</option>
+                          ))}
+                        </select>
+                        {asset.isActive && <span style={{ fontSize: 11, color: '#4caf50', fontWeight: 600 }}>● 当前使用</span>}
+                        {asset.isDefault && <span style={{ fontSize: 11, color: '#ff9800', fontWeight: 600 }}>★ 默认</span>}
+                        <span style={{ color: '#999', fontSize: 11, marginLeft: 'auto' }}>
+                          {timeStr} · {asset.frameCount}帧 · {asset.frameWidth}×{asset.frameHeight} · {asset.format}
                         </span>
                       </>
                     )}
                   </div>
 
+                  {/* 第二行：缩放 + 循环 + 操作按钮 + 默认按钮 */}
                   {!isRenaming && (
-                    <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <label style={{ fontSize: 11, color: '#666' }}>缩放</label>
                       <input type="number" step="0.1" min="0.1" max="2" value={asset.displayScale}
                         onChange={(e) => handleDisplayScaleChange(asset.id, e.target.value)}
                         onBlur={() => handleSaveDisplayScale(asset)}
                         style={{ width: 48, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3 }} />
-                      <button onClick={() => handleApplyAsset(asset)} style={{ padding: '3px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: 3 }}>应用</button>
-                      <button onClick={() => handleOpenAssetDir(asset)} style={{ padding: '3px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#607d8b', color: '#fff', border: 'none', borderRadius: 3 }}>打开</button>
-                      <button onClick={() => handleStartRename(asset)} style={{ padding: '3px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#2196f3', color: '#fff', border: 'none', borderRadius: 3 }}>重命名</button>
-                      <button onClick={() => handleDeleteAsset(asset)} style={{ padding: '3px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#f44336', color: '#fff', border: 'none', borderRadius: 3 }}>删除</button>
+                      <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={asset.loop}
+                          onChange={() => handleToggleLoop(asset)}
+                          style={{ cursor: 'pointer' }} />
+                        循环
+                      </label>
+                      <span style={{ borderLeft: '1px solid #ddd', height: 14, margin: '0 2px' }} />
+                      <button onClick={() => handleApplyAsset(asset)} style={btnStyle('#4caf50')}>应用</button>
+                      <button onClick={() => handleOpenAssetDir(asset)} style={btnStyle('#607d8b')}>打开</button>
+                      <button onClick={() => handleStartRename(asset)} style={btnStyle('#2196f3')}>重命名</button>
+                      <button onClick={() => handleDeleteAsset(asset)} style={btnStyle('#f44336')}>删除</button>
+                      <span style={{ borderLeft: '1px solid #ddd', height: 14, margin: '0 2px' }} />
+                      <button onClick={() => handleToggleDefault(asset)}
+                        style={btnStyle(asset.isDefault ? '#ff9800' : '#bbb')}>
+                        {asset.isDefault ? '取消默认' : '设为默认'}
+                      </button>
                     </div>
                   )}
                 </div>

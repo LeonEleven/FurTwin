@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { readdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs'
 import { join, resolve, relative } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
+import { getControlPanel } from '../windows/controlPanel'
 
 const LOCAL_CONFIG_PATH = resolve('src/renderer/public/assets/actions/idle/local.config.json')
 const PUBLIC_DIR = resolve('src/renderer/public')
@@ -54,6 +55,61 @@ function deleteLocalConfig() {
   }
 }
 
+/**
+ * Restore demo: delete local.config.json and reload all pet windows.
+ * Used by both control panel and right-click menu.
+ */
+export function restoreDemo(): void {
+  console.log('[preview] restoreDemo')
+  deleteLocalConfig()
+  setTimeout(() => {
+    notifyPetWindows()
+    // Notify control panel to clear "current use" status
+    const cp = getControlPanel()
+    if (cp && !cp.isDestroyed()) {
+      try { cp.webContents.send(IPC_CHANNELS.ACTIVE_ASSET_CHANGED) } catch {}
+    }
+  }, 100)
+}
+
+/**
+ * Startup validation: check if local.config.json references a valid asset.
+ * If the frames directory is missing or has no frames, delete the config
+ * so the pet falls back to the default demo animation.
+ */
+export function validateStartupConfig(): void {
+  if (!existsSync(LOCAL_CONFIG_PATH)) return
+
+  try {
+    const config = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+    const framesDir: string = config.framesDir
+    if (!framesDir) {
+      console.log('[preview] startup: empty framesDir, deleting local.config.json')
+      deleteLocalConfig()
+      return
+    }
+
+    const absDir = join(PUBLIC_DIR, framesDir.replace(/^\.\//, ''))
+    if (!existsSync(absDir)) {
+      console.log(`[preview] startup: frames dir missing (${absDir}), deleting local.config.json`)
+      deleteLocalConfig()
+      return
+    }
+
+    const hasFrames = readdirSync(absDir).some(f => f.endsWith('.png') || f.endsWith('.webp'))
+    if (!hasFrames) {
+      console.log(`[preview] startup: no frames in ${absDir}, deleting local.config.json`)
+      deleteLocalConfig()
+      return
+    }
+
+    console.log(`[preview] startup: local.config.json valid, framesDir=${framesDir}`)
+  } catch {
+    console.log('[preview] startup: failed to parse local.config.json, deleting')
+    deleteLocalConfig()
+  }
+}
+
 export function setupPreview(): void {
   // Clean up stale local.config.json on startup
   // (Don't delete - user may have a valid preview. Only delete on explicit RESTORE_DEMO)
@@ -102,13 +158,30 @@ export function setupPreview(): void {
     }, 100)
   })
 
-  // Restore demo preview
+  // Restore demo preview (from control panel)
   ipcMain.on(IPC_CHANNELS.RESTORE_DEMO, () => {
     console.log('[preview] RESTORE_DEMO received')
-    deleteLocalConfig()
+    restoreDemo()
+  })
 
-    setTimeout(() => {
+  // Restore demo from right-click menu
+  ipcMain.on(IPC_CHANNELS.RESTORE_DEMO_MENU, () => {
+    console.log('[preview] RESTORE_DEMO_MENU received')
+    restoreDemo()
+  })
+
+  // Update playback properties of the currently active asset
+  ipcMain.on(IPC_CHANNELS.UPDATE_ACTIVE_PLAYBACK, (_event, payload: { loop?: boolean; fps?: number }) => {
+    if (!existsSync(LOCAL_CONFIG_PATH)) return
+    try {
+      const config = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+      if (payload.loop !== undefined) config.loop = payload.loop
+      if (payload.fps !== undefined) config.fps = payload.fps
+      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+      console.log(`[preview] updated active playback: loop=${config.loop} fps=${config.fps}`)
       notifyPetWindows()
-    }, 100)
+    } catch (e) {
+      console.warn('[preview] update active playback failed:', e)
+    }
   })
 }

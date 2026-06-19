@@ -9,6 +9,8 @@ import { resolve } from 'path'
 
 const METADATA_FILE = 'asset-metadata.json'
 
+export type ActionType = 'idle' | 'play' | 'sleep' | 'greet' | 'custom'
+
 export interface AssetInfo {
   id: string
   path: string
@@ -20,6 +22,12 @@ export interface AssetInfo {
   frameHeight: number
   format: string
   displayScale: number
+  actionType: ActionType
+  loop: boolean
+  isDefault: boolean
+  includeInRandom: boolean
+  interruptible: boolean
+  fpsOverride: number | null
 }
 
 function getPngDimensions(filePath: string): { width: number; height: number } | null {
@@ -95,6 +103,14 @@ export function loadAssetInfo(dirPath: string, dirName: string): AssetInfo | nul
   if (!meta.format) { meta.format = 'png'; needsRepair = true }
   if (!Number.isFinite(meta.displayScale) || meta.displayScale <= 0) { meta.displayScale = 0.5; needsRepair = true }
   if (!Number.isFinite(meta.fps) || meta.fps <= 0) { meta.fps = 12; needsRepair = true }
+  // Action resource v1 fields
+  const VALID_ACTION_TYPES = ['idle', 'play', 'sleep', 'greet', 'custom']
+  if (!VALID_ACTION_TYPES.includes(meta.actionType)) { meta.actionType = 'custom'; needsRepair = true }
+  if (typeof meta.loop !== 'boolean') { meta.loop = true; needsRepair = true }
+  if (typeof meta.isDefault !== 'boolean') { meta.isDefault = false; needsRepair = true }
+  if (typeof meta.includeInRandom !== 'boolean') { meta.includeInRandom = true; needsRepair = true }
+  if (typeof meta.interruptible !== 'boolean') { meta.interruptible = true; needsRepair = true }
+  if (meta.fpsOverride !== null && !Number.isFinite(meta.fpsOverride)) { meta.fpsOverride = null; needsRepair = true }
 
   // Auto-repair metadata file if needed
   if (needsRepair) {
@@ -115,6 +131,12 @@ export function loadAssetInfo(dirPath: string, dirName: string): AssetInfo | nul
     frameHeight: meta.frameHeight,
     format: meta.format,
     displayScale: meta.displayScale,
+    actionType: meta.actionType,
+    loop: meta.loop,
+    isDefault: meta.isDefault,
+    includeInRandom: meta.includeInRandom,
+    interruptible: meta.interruptible,
+    fpsOverride: meta.fpsOverride,
   }
 }
 
@@ -140,6 +162,61 @@ export function toFramesDir(assetPath: string): string {
 }
 
 const LOCAL_CONFIG_PATH = resolve('src/renderer/public/assets/actions/idle/local.config.json')
+const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
+
+/**
+ * Toggle default asset. If target is already default, clear it.
+ * Otherwise set it as default and clear all others.
+ */
+export function setDefaultAsset(targetDirPath: string): void {
+  if (!existsSync(GENERATED_DIR)) return
+
+  // Check if target is already the default
+  const targetMetaPath = join(targetDirPath, METADATA_FILE)
+  let isAlreadyDefault = false
+  try {
+    if (existsSync(targetMetaPath)) {
+      const meta = JSON.parse(readFileSync(targetMetaPath, 'utf-8'))
+      isAlreadyDefault = meta.isDefault === true
+    }
+  } catch {}
+
+  const entries = readdirSync(GENERATED_DIR, { withFileTypes: true })
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const dirPath = join(GENERATED_DIR, entry.name)
+    const metaPath = join(dirPath, METADATA_FILE)
+    try {
+      const meta = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf-8')) : {}
+      // If toggling off: clear all. If setting new: clear others, set target.
+      const shouldBeDefault = isAlreadyDefault ? false : dirPath === targetDirPath
+      if (meta.isDefault !== shouldBeDefault) {
+        meta.isDefault = shouldBeDefault
+        writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8')
+      }
+    } catch {}
+  }
+}
+
+/**
+ * Clear isDefault from all generated assets.
+ */
+export function clearAllDefaults(): void {
+  if (!existsSync(GENERATED_DIR)) return
+  const entries = readdirSync(GENERATED_DIR, { withFileTypes: true })
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const metaPath = join(GENERATED_DIR, entry.name, METADATA_FILE)
+    try {
+      if (!existsSync(metaPath)) continue
+      const meta = JSON.parse(readFileSync(metaPath, 'utf-8'))
+      if (meta.isDefault) {
+        meta.isDefault = false
+        writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8')
+      }
+    } catch {}
+  }
+}
 
 /**
  * Get the currently active generated asset ID from local.config.json.
