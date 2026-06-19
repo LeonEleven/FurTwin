@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from
 import { join, resolve, relative } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
 import { getControlPanel } from '../windows/controlPanel'
+import { pauseAutoBehavior } from '../behavior'
 
 const LOCAL_CONFIG_PATH = resolve('src/renderer/public/assets/actions/idle/local.config.json')
 const PUBLIC_DIR = resolve('src/renderer/public')
@@ -69,6 +70,8 @@ export function restoreDemo(): void {
     if (cp && !cp.isDestroyed()) {
       try { cp.webContents.send(IPC_CHANNELS.ACTIVE_ASSET_CHANGED) } catch {}
     }
+    // Pause auto-behavior on manual restore demo
+    pauseAutoBehavior()
   }, 100)
 }
 

@@ -3,6 +3,7 @@ import { createPetWindow, setupWindowResize, setupPetDrag, setupContextMenu } fr
 import { createControlPanel, setQuitting, showControlPanel } from './windows/controlPanel'
 import { setupSelectVideo, setupExtractFrames } from './ipc/extract'
 import { validateStartupConfig } from './ipc/preview'
+import { initBehavior, setupBehaviorIPC } from './behavior'
 import { setupOpenPath } from './ipc/openPath'
 import { setupGeneratedAssets } from './ipc/generatedAssets'
 import { setupActionLib } from './ipc/actionLib'
@@ -32,6 +33,10 @@ app.whenReady().then(() => {
   setupOpenPath()
   setupGeneratedAssets()
   setupActionLib()
+
+  // 行为系统（在所有 IPC 注册完成后初始化）
+  setupBehaviorIPC()
+  initBehavior()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -42,6 +42,7 @@ export function App() {
   const [assets, setAssets] = useState<GeneratedAsset[]>([])
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [autoBehaviorEnabled, setAutoBehaviorEnabled] = useState(true)
 
   const logRef = useRef<HTMLDivElement>(null)
 
@@ -75,6 +76,27 @@ export function App() {
     })
     return off
   }, [refreshAssets])
+
+  // Listen for auto-behavior state changes
+  useEffect(() => {
+    const off = window.controlAPI.onAutoBehaviorChanged((enabled) => {
+      console.log(`[control] auto-behavior changed: ${enabled}`)
+      setAutoBehaviorEnabled(enabled)
+    })
+    return off
+  }, [])
+
+  // Read initial auto-behavior state from local.config.json
+  useEffect(() => {
+    fetch('./assets/actions/idle/local.config.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : {})
+      .then((config: any) => {
+        if (typeof config.autoBehaviorEnabled === 'boolean') {
+          setAutoBehaviorEnabled(config.autoBehaviorEnabled)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const handleSelectVideo = useCallback(async () => {
     const path = await window.controlAPI.selectVideo()
@@ -193,6 +215,12 @@ export function App() {
     window.controlAPI.setAssetPlayback(asset.path, { includeInRandom: newVal })
   }, [])
 
+  const handleToggleAutoBehavior = useCallback(() => {
+    const newVal = !autoBehaviorEnabled
+    setAutoBehaviorEnabled(newVal)
+    window.controlAPI.toggleAutoBehavior(newVal)
+  }, [autoBehaviorEnabled])
+
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '6px 8px', border: '1px solid #ccc',
     borderRadius: 4, fontSize: 13, fontFamily: 'inherit',
@@ -303,6 +331,15 @@ export function App() {
         </div>
       )}
 
+      {/* 自动行为开关 */}
+      <div style={{ marginTop: 12, padding: '8px 12px', backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d0e3f7', fontSize: 13 }}>
+        <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input type="checkbox" checked={autoBehaviorEnabled} onChange={handleToggleAutoBehavior} style={{ cursor: 'pointer' }} />
+          <span style={{ fontWeight: 600 }}>自动行为</span>
+          <span style={{ color: '#888', fontSize: 11 }}>({autoBehaviorEnabled ? '开启' : '关闭'} — 自动插播随机动作)</span>
+        </label>
+      </div>
+
       {/* 动作库 */}
       {assets.length > 0 && (
         <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 13, marginTop: 12 }}>
@@ -373,6 +410,12 @@ export function App() {
                           onChange={() => handleToggleLoop(asset)}
                           style={{ cursor: 'pointer' }} />
                         循环
+                      </label>
+                      <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={asset.includeInRandom}
+                          onChange={() => handleToggleRandom(asset)}
+                          style={{ cursor: 'pointer' }} />
+                        参与自动随机
                       </label>
                       <span style={{ borderLeft: '1px solid #ddd', height: 14, margin: '0 2px' }} />
                       <button onClick={() => handleApplyAsset(asset)} style={btnStyle('#4caf50')}>应用</button>

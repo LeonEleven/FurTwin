@@ -84,6 +84,8 @@ export function createPetWindow(): BrowserWindow {
 
   petWindow.once('ready-to-show', () => {
     petWindow?.showInactive()
+    const bounds = petWindow?.getBounds()
+    console.log(`[petWindow] ready-to-show: bounds=${JSON.stringify(bounds)} visible=${petWindow?.isVisible()}`)
   })
 
   petWindow.on('moved', () => {
@@ -136,6 +138,7 @@ export function setupWindowResize(): void {
       const wa = display.workArea
       const clampedX = Math.max(wa.x, Math.min(newX, wa.x + wa.width - w))
       const clampedY = Math.max(wa.y, Math.min(newY, wa.y + wa.height - h))
+      console.log(`[petWindow] resize: ${w}x${h} pos=(${clampedX},${clampedY}) workArea=(${wa.x},${wa.y},${wa.width},${wa.height})`)
       petWindow.setBounds({ x: clampedX, y: clampedY, width: w, height: h })
     } catch {}
   })

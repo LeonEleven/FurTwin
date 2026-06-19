@@ -17,6 +17,20 @@ interface ExtractOptions {
   centerCrop?: string
 }
 
+interface AnimConfig {
+  name: string
+  label: string
+  framesDir: string
+  fps: number
+  scale: number
+  displayScale?: number
+  loop: boolean
+  frameCount: number
+  frameWidth: number
+  frameHeight: number
+  framePattern: string
+}
+
 interface PetShapePayload {
   framesDir: string
   framePattern: string
@@ -66,6 +80,8 @@ declare global {
       clearPetShape: () => void
       applyFrameShape: (frameIndex: number) => void
       onPetShapeUpdated: (callback: (info: { rects: number; activeBlocks: number; totalBlocks: number }) => void) => () => void
+      onSwitchAnimRuntime: (callback: (config: AnimConfig) => void) => () => void
+      notifyPlaybackComplete: () => void
     }
     controlAPI: {
       selectVideo: () => Promise<string | null>
@@ -88,6 +104,8 @@ declare global {
       setDefaultAsset: (path: string) => void
       updateActivePlayback: (fields: { loop?: boolean; fps?: number }) => void
       onActiveAssetChanged: (callback: () => void) => () => void
+      toggleAutoBehavior: (enabled: boolean) => void
+      onAutoBehaviorChanged: (callback: (enabled: boolean) => void) => () => void
     }
   }
 }

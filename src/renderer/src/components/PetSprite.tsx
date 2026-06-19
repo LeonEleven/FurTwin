@@ -8,7 +8,7 @@ interface PetSpriteProps {
 }
 
 export function PetSprite({ config, reloadKey }: PetSpriteProps) {
-  const { currentFrameSrc, currentFrame, totalFrames, pause, resume } = useAnimPlayer(config, reloadKey)
+  const { currentFrameSrc, currentFrame, totalFrames, isPlaying, pause, resume } = useAnimPlayer(config, reloadKey)
   const isDragging = useRef(false)
   const [repaintKey, setRepaintKey] = useState(0)
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -80,6 +80,14 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
   useEffect(() => {
     return window.petAPI.onSurfaceRefresh(() => setRepaintKey((k) => k + 1))
   }, [])
+
+  // Detect non-loop animation playback complete
+  useEffect(() => {
+    if (!isPlaying && !config.loop) {
+      console.log('[pet] non-loop animation finished, notifying main process')
+      window.petAPI.notifyPlaybackComplete()
+    }
+  }, [isPlaying, config.loop])
 
   // --- drag ---
   const handlePointerDown = useCallback((e: React.PointerEvent) => {

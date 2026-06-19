@@ -61,6 +61,16 @@ contextBridge.exposeInMainWorld('petAPI', {
     ipcRenderer.on(IPC_CHANNELS.PET_SHAPE_UPDATED, handler)
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.PET_SHAPE_UPDATED, handler) }
   },
+  // --- 行为系统：运行时切换动画（不写 local.config.json） ---
+  onSwitchAnimRuntime: (callback: (config: any) => void) => {
+    const handler = (_: unknown, config: any) => callback(config)
+    ipcRenderer.on(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, handler)
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, handler) }
+  },
+  // --- 行为系统：通知非循环动画播放完成 ---
+  notifyPlaybackComplete: () => {
+    ipcRenderer.send(IPC_CHANNELS.ANIM_PLAYBACK_COMPLETE)
+  },
 })
 
 contextBridge.exposeInMainWorld('controlAPI', {
@@ -146,5 +156,14 @@ contextBridge.exposeInMainWorld('controlAPI', {
     const handler = () => callback()
     ipcRenderer.on(IPC_CHANNELS.ACTIVE_ASSET_CHANGED, handler)
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.ACTIVE_ASSET_CHANGED, handler) }
+  },
+  // --- 行为系统 ---
+  toggleAutoBehavior: (enabled: boolean) => {
+    ipcRenderer.send(IPC_CHANNELS.TOGGLE_AUTO_BEHAVIOR, { enabled })
+  },
+  onAutoBehaviorChanged: (callback: (enabled: boolean) => void) => {
+    const handler = (_: unknown, enabled: boolean) => callback(enabled)
+    ipcRenderer.on(IPC_CHANNELS.AUTO_BEHAVIOR_STATE_CHANGED, handler)
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.AUTO_BEHAVIOR_STATE_CHANGED, handler) }
   },
 })

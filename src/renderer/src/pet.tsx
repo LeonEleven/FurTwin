@@ -34,12 +34,24 @@ function PetApp() {
   const [config, setConfig] = useState<AnimConfig | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const reloadIdRef = useRef(0)
+  const runtimeConfigRef = useRef<AnimConfig | null>(null)
 
   const loadConfig = useCallback(() => {
     const currentReloadId = ++reloadIdRef.current
     console.log(`[pet] loadConfig reloadId=${currentReloadId}`)
 
     window.petAPI.clearPetShape()
+
+    // If a runtime config was set by behavior system, use it directly
+    if (runtimeConfigRef.current) {
+      const rc = runtimeConfigRef.current
+      runtimeConfigRef.current = null
+      if (reloadIdRef.current !== currentReloadId) return
+      logConfig('runtime', rc)
+      setConfig(rc)
+      setReloadKey((k) => k + 1)
+      return
+    }
 
     const cacheBuster = `?t=${Date.now()}`
 
@@ -103,10 +115,11 @@ function PetApp() {
     return removeListener
   }, [loadConfig])
 
-  // 控制面板 -> RELOAD_ANIM
+  // 控制面板 -> RELOAD_ANIM (always reads from file, ignores runtime config)
   useEffect(() => {
     const removeListener = window.petAPI.onReloadAnim(() => {
       console.log('[pet] RELOAD_ANIM received')
+      runtimeConfigRef.current = null // clear any pending runtime config
       loadConfig()
     })
     return removeListener
@@ -119,6 +132,17 @@ function PetApp() {
     })
     return removeListener
   }, [])
+
+  // 行为系统：运行时切换动画（不写 local.config.json）
+  // Goes through loadConfig() to reuse the stable resize/shape flow
+  useEffect(() => {
+    const removeListener = window.petAPI.onSwitchAnimRuntime((animConfig: AnimConfig) => {
+      console.log(`[pet] SWITCH_ANIM_RUNTIME: ${animConfig.name} loop=${animConfig.loop} framesDir=${animConfig.framesDir}`)
+      runtimeConfigRef.current = animConfig
+      loadConfig()
+    })
+    return removeListener
+  }, [loadConfig])
 
   if (!config) return null
 
