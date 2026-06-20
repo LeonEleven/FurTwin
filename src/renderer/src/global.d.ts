@@ -69,6 +69,7 @@ interface GeneratedAssetInfo {
   trimBox: { x: number; y: number; w: number; h: number } | null
   anchorOffsetX: number
   anchorOffsetY: number
+  triggerOnClick: boolean
 }
 
 declare global {
@@ -90,6 +91,7 @@ declare global {
       onPetShapeUpdated: (callback: (info: { rects: number; activeBlocks: number; totalBlocks: number }) => void) => () => void
       onSwitchAnimRuntime: (callback: (config: AnimConfig) => void) => () => void
       notifyPlaybackComplete: () => void
+      triggerClickInteraction: () => void
     }
     controlAPI: {
       selectVideo: () => Promise<string | null>
@@ -108,7 +110,8 @@ declare global {
       setAssetPlayback: (path: string, fields: {
         actionType?: string; loop?: boolean;
         includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null;
-        autoPlayRepeatCount?: number; anchorOffsetX?: number; anchorOffsetY?: number
+        autoPlayRepeatCount?: number; anchorOffsetX?: number; anchorOffsetY?: number;
+        triggerOnClick?: boolean
       }) => void
       setDefaultAsset: (path: string) => void
       rebuildAnchor: (path: string, dirName: string) => Promise<{ ok: boolean; rebuilt?: boolean; error?: string }>

@@ -139,7 +139,8 @@ export function setupGeneratedAssets(): void {
   ipcMain.on(IPC_CHANNELS.SET_ASSET_PLAYBACK, (_event, payload: {
     path: string; actionType?: string; loop?: boolean;
     includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null;
-    autoPlayRepeatCount?: number; anchorOffsetX?: number; anchorOffsetY?: number
+    autoPlayRepeatCount?: number; anchorOffsetX?: number; anchorOffsetY?: number;
+    triggerOnClick?: boolean
   }) => {
     if (!payload?.path) return
     const metaPath = join(payload.path, METADATA_FILE)
@@ -153,6 +154,7 @@ export function setupGeneratedAssets(): void {
       if (payload.autoPlayRepeatCount !== undefined) existing.autoPlayRepeatCount = payload.autoPlayRepeatCount
       if (payload.anchorOffsetX !== undefined) existing.anchorOffsetX = payload.anchorOffsetX
       if (payload.anchorOffsetY !== undefined) existing.anchorOffsetY = payload.anchorOffsetY
+      if (payload.triggerOnClick !== undefined) existing.triggerOnClick = payload.triggerOnClick
       writeFileSync(metaPath, JSON.stringify(existing, null, 2), 'utf-8')
       console.log(`[generated] updated playback: ${payload.path}`)
 

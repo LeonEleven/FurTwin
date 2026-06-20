@@ -460,6 +460,90 @@ export function isAutoBehaviorActive(): boolean {
   return autoBehaviorEnabled
 }
 
+// ─── Click Interaction ──────────────────────────────────
+
+const CLICK_COOLDOWN_MS = 600
+let lastClickInteractionTime = 0
+
+/**
+ * Select a random click-interaction candidate from assets with triggerOnClick=true.
+ * Does NOT exclude idle fallback — if user explicitly enabled triggerOnClick, it's valid.
+ * Prefers candidates that are not the currently-playing runtime action.
+ */
+function selectClickCandidate(): { config: AnimConfig; repeatCount: number } | null {
+  const assets = scanValidAssets()
+  if (assets.length === 0) return null
+
+  // Filter: triggerOnClick=true, valid resource
+  const candidates = assets.filter(a => a.info.triggerOnClick)
+  if (candidates.length === 0) {
+    console.log('[behavior] no click interaction candidates')
+    return null
+  }
+
+  // Prefer non-current-playing candidates
+  const currentName = currentAutoInsertConfig?.name
+  let pool = currentName ? candidates.filter(a => a.info.name !== currentName) : candidates
+  if (pool.length === 0) pool = candidates // fallback: allow current action (will replay from frame 0)
+
+  const pick = pool[Math.floor(Math.random() * pool.length)]
+  console.log(`[behavior] click candidate: "${pick.info.name}" repeat=${pick.info.autoPlayRepeatCount}`)
+
+  const anchor = computeDisplayAnchor(pick.info)
+  return {
+    config: {
+      name: pick.info.name,
+      label: pick.info.name,
+      framesDir: toFramesDir(pick.path),
+      fps: pick.info.fpsOverride ?? 12,
+      scale: 0.5,
+      displayScale: pick.info.displayScale,
+      loop: false,
+      frameCount: pick.info.frameCount,
+      frameWidth: pick.info.frameWidth,
+      frameHeight: pick.info.frameHeight,
+      framePattern: `{}.${pick.info.format}`,
+      anchorX: anchor?.anchorX,
+      anchorY: anchor?.anchorY,
+    },
+    repeatCount: Math.max(1, Math.round(pick.info.autoPlayRepeatCount)),
+  }
+}
+
+/**
+ * Triggered by left-click on the pet. Selects a random click-interaction action
+ * and plays it (runtime, no local.config.json write). Pauses auto-behavior.
+ * Includes cooldown to prevent rapid-fire restarts.
+ */
+export function triggerClickInteraction(): void {
+  const now = Date.now()
+  if (now - lastClickInteractionTime < CLICK_COOLDOWN_MS) {
+    console.log('[behavior] click interaction: cooldown, ignoring')
+    return
+  }
+  lastClickInteractionTime = now
+
+  const result = selectClickCandidate()
+  if (!result) return
+
+  // If already auto-playing, stop current first
+  if (isAutoPlaying && autoTimer) {
+    // Don't clear timer — let onPlaybackComplete handle it naturally
+  }
+
+  // Pause auto-behavior
+  pauseAutoBehavior()
+
+  // Play the click action
+  isAutoPlaying = true
+  autoPlayRepeatRemaining = result.repeatCount - 1
+  currentAutoInsertConfig = result.config
+  notifyAutoPlaying(result.config.name)
+  console.log(`[behavior] click interaction: "${result.config.name}" (repeat ${result.repeatCount}x)`)
+  switchAnimRuntime(result.config)
+  // Playback complete will be handled by ANIM_PLAYBACK_COMPLETE → onPlaybackComplete
+}
+
 // ─── IPC Setup ──────────────────────────────────────────
 
 export function setupBehaviorIPC(): void {
@@ -473,6 +557,12 @@ export function setupBehaviorIPC(): void {
   ipcMain.on(IPC_CHANNELS.TOGGLE_AUTO_BEHAVIOR, (_event, payload: { enabled: boolean }) => {
     if (typeof payload?.enabled !== 'boolean') return
     toggleAutoBehavior(payload.enabled)
+  })
+
+  // Pet renderer reports click interaction
+  ipcMain.on(IPC_CHANNELS.TRIGGER_CLICK_INTERACTION, () => {
+    console.log('[behavior] TRIGGER_CLICK_INTERACTION received')
+    triggerClickInteraction()
   })
 
   // Control panel saves behavior params

@@ -71,6 +71,9 @@ contextBridge.exposeInMainWorld('petAPI', {
   notifyPlaybackComplete: () => {
     ipcRenderer.send(IPC_CHANNELS.ANIM_PLAYBACK_COMPLETE)
   },
+  triggerClickInteraction: () => {
+    ipcRenderer.send(IPC_CHANNELS.TRIGGER_CLICK_INTERACTION)
+  },
 })
 
 contextBridge.exposeInMainWorld('controlAPI', {
@@ -140,7 +143,8 @@ contextBridge.exposeInMainWorld('controlAPI', {
   setAssetPlayback: (path: string, fields: {
     actionType?: string; loop?: boolean;
     includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null;
-    autoPlayRepeatCount?: number; anchorOffsetX?: number; anchorOffsetY?: number
+    autoPlayRepeatCount?: number; anchorOffsetX?: number; anchorOffsetY?: number;
+    triggerOnClick?: boolean
   }) => {
     ipcRenderer.send(IPC_CHANNELS.SET_ASSET_PLAYBACK, { path, ...fields })
   },

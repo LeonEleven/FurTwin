@@ -35,6 +35,7 @@ export interface AssetInfo {
   trimBox: { x: number; y: number; w: number; h: number } | null
   anchorOffsetX: number
   anchorOffsetY: number
+  triggerOnClick: boolean
 }
 
 function getPngDimensions(filePath: string): { width: number; height: number } | null {
@@ -125,6 +126,7 @@ export function loadAssetInfo(dirPath: string, dirName: string): AssetInfo | nul
   if (meta.sourceHeight !== undefined && !Number.isFinite(meta.sourceHeight)) { meta.sourceHeight = null; needsRepair = true }
   if (meta.anchorOffsetX !== undefined && !Number.isFinite(meta.anchorOffsetX)) { meta.anchorOffsetX = 0; needsRepair = true }
   if (meta.anchorOffsetY !== undefined && !Number.isFinite(meta.anchorOffsetY)) { meta.anchorOffsetY = 0; needsRepair = true }
+  if (typeof meta.triggerOnClick !== 'boolean') { meta.triggerOnClick = false; needsRepair = true }
 
   // Auto-repair metadata file if needed
   if (needsRepair) {
@@ -157,6 +159,7 @@ export function loadAssetInfo(dirPath: string, dirName: string): AssetInfo | nul
     trimBox: meta.trimBox ?? null,
     anchorOffsetX: meta.anchorOffsetX ?? 0,
     anchorOffsetY: meta.anchorOffsetY ?? 0,
+    triggerOnClick: meta.triggerOnClick ?? false,
   }
 }
 

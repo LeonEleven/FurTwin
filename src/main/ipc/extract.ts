@@ -181,6 +181,7 @@ export function setupExtractFrames(): void {
           autoPlayRepeatCount: 1,
           anchorOffsetX: 0,
           anchorOffsetY: 0,
+          triggerOnClick: false,
         }
         // 保存源画布和裁剪信息（用于动作切换时角色锚点对齐）
         if (sourceWidth > 0 && sourceHeight > 0) {

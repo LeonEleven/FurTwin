@@ -97,9 +97,13 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
     }
   }, [isPlaying, config.loop])
 
-  // --- drag ---
+  // --- drag + click detection ---
+  const pointerStartRef = useRef<{ x: number; y: number; time: number }>({ x: 0, y: 0, time: 0 })
+  const CLICK_DISTANCE_THRESHOLD = 6 // px — movement beyond this = drag, not click
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return
+    pointerStartRef.current = { x: e.screenX, y: e.screenY, time: Date.now() }
     isDragging.current = true
     pause()
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -118,6 +122,15 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
     window.petAPI.dragEnd()
     resume()
     window.petAPI.applyFrameShape(currentFrame)
+
+    // Detect click: small movement distance = click, not drag
+    const start = pointerStartRef.current
+    const dx = e.screenX - start.x
+    const dy = e.screenY - start.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist < CLICK_DISTANCE_THRESHOLD) {
+      window.petAPI.triggerClickInteraction()
+    }
   }, [resume, currentFrame])
 
   const handlePointerCancel = useCallback((e: React.PointerEvent) => {
