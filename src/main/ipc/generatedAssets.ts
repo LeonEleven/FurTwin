@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { readdirSync, statSync, existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join, resolve } from 'path'
 import { IPC_CHANNELS } from '../../shared/types'
-import { loadAssetInfo, getActiveAssetId, setDefaultAsset, type AssetInfo } from '../utils/assetInfo'
+import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, type AssetInfo } from '../utils/assetInfo'
 
 const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
 const METADATA_FILE = 'asset-metadata.json'
@@ -103,7 +103,8 @@ export function setupGeneratedAssets(): void {
   // 更新动作播放属性
   ipcMain.on(IPC_CHANNELS.SET_ASSET_PLAYBACK, (_event, payload: {
     path: string; actionType?: string; loop?: boolean;
-    includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null
+    includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null;
+    autoPlayRepeatCount?: number
   }) => {
     if (!payload?.path) return
     const metaPath = join(payload.path, METADATA_FILE)
@@ -114,6 +115,7 @@ export function setupGeneratedAssets(): void {
       if (payload.includeInRandom !== undefined) existing.includeInRandom = payload.includeInRandom
       if (payload.interruptible !== undefined) existing.interruptible = payload.interruptible
       if (payload.fpsOverride !== undefined) existing.fpsOverride = payload.fpsOverride
+      if (payload.autoPlayRepeatCount !== undefined) existing.autoPlayRepeatCount = payload.autoPlayRepeatCount
       writeFileSync(metaPath, JSON.stringify(existing, null, 2), 'utf-8')
       console.log(`[generated] updated playback: ${payload.path}`)
     } catch {}
@@ -127,6 +129,17 @@ export function setupGeneratedAssets(): void {
       console.log(`[generated] set default: ${payload.path}`)
     } catch (e) {
       console.warn('[generated] set default failed:', e)
+    }
+  })
+
+  // 重建 anchor 元数据
+  ipcMain.handle(IPC_CHANNELS.REBUILD_ANCHOR, (_event, payload: { path: string; dirName: string }) => {
+    if (!payload?.path || !payload?.dirName) return { ok: false, error: 'invalid payload' }
+    try {
+      const rebuilt = rebuildAssetAnchor(payload.path, payload.dirName)
+      return { ok: true, rebuilt }
+    } catch (e) {
+      return { ok: false, error: String(e) }
     }
   })
 }

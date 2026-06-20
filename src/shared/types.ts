@@ -11,6 +11,8 @@ export interface AnimConfig {
   frameWidth: number
   frameHeight: number
   framePattern: string
+  anchorX?: number  // character anchor in display-space pixels (from left)
+  anchorY?: number  // character anchor in display-space pixels (from top)
 }
 
 export interface DragPayload {
@@ -82,4 +84,7 @@ export const IPC_CHANNELS = {
   ANIM_PLAYBACK_COMPLETE: 'ANIM_PLAYBACK_COMPLETE',
   TOGGLE_AUTO_BEHAVIOR: 'TOGGLE_AUTO_BEHAVIOR',
   AUTO_BEHAVIOR_STATE_CHANGED: 'AUTO_BEHAVIOR_STATE_CHANGED',
+  SAVE_BEHAVIOR_PARAMS: 'SAVE_BEHAVIOR_PARAMS',
+  AUTO_PLAYING_CHANGED: 'AUTO_PLAYING_CHANGED',
+  REBUILD_ANCHOR: 'REBUILD_ANCHOR',
 } as const

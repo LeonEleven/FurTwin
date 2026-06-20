@@ -13,6 +13,7 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
   const [repaintKey, setRepaintKey] = useState(0)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
+  const prevAnchorRef = useRef<{ x?: number; y?: number }>({})
 
   // Unified effectiveScale
   const effectiveScale = config.displayScale ?? config.scale
@@ -42,11 +43,18 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
     return () => clearTimeout(timer)
   }, [effectiveScale, displayWidth, displayHeight, config.frameWidth, config.frameHeight, currentFrameSrc])
 
-  // Resize window
+  // Resize window (with anchor alignment if available)
+  // Send old anchor (from previous config) and new anchor (from current config)
+  // so the main process can align the character anchor point across animations
   useEffect(() => {
-    console.log(`[pet] resizeWindow: ${displayWidth}x${displayHeight}`)
-    window.petAPI.resizeWindow(displayWidth, displayHeight)
-  }, [displayWidth, displayHeight])
+    const oldAnchor = prevAnchorRef.current
+    const newAnchorX = config.anchorX
+    const newAnchorY = config.anchorY
+    console.log(`[pet] resizeWindow: ${displayWidth}x${displayHeight} oldAnchor=(${oldAnchor.x ?? '-'},${oldAnchor.y ?? '-'}) newAnchor=(${newAnchorX ?? '-'},${newAnchorY ?? '-'})`)
+    window.petAPI.resizeWindow(displayWidth, displayHeight, oldAnchor.x, oldAnchor.y, newAnchorX, newAnchorY)
+    // Update stored anchor for next switch
+    prevAnchorRef.current = { x: newAnchorX, y: newAnchorY }
+  }, [displayWidth, displayHeight, config.anchorX, config.anchorY])
 
   // Compute per-frame shapes
   useEffect(() => {

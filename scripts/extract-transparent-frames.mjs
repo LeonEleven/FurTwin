@@ -254,7 +254,14 @@ function trimAlphaFrames(outputDir, threshold, padding, minPixels) {
   }
   console.log('')
 
-  return { frameCount: files.length, frameWidth: paddedW, frameHeight: paddedH }
+  return {
+    frameCount: files.length,
+    frameWidth: paddedW,
+    frameHeight: paddedH,
+    sourceWidth: origW,
+    sourceHeight: origH,
+    trimBox: { x: paddedX, y: paddedY, w: paddedW, h: paddedH },
+  }
 }
 
 // ─── 主逻辑 ──────────────────────────────────────────────
@@ -616,6 +623,7 @@ if (cleanComponents && format === 'png' && outputFiles.length > 0) {
 let finalWidth = 0
 let finalHeight = 0
 let finalCount = outputFiles.length
+let trimInfo = null
 
 if (trimAlpha && format === 'png') {
   console.log('')
@@ -624,6 +632,7 @@ if (trimAlpha && format === 'png') {
   finalWidth = result.frameWidth
   finalHeight = result.frameHeight
   finalCount = result.frameCount
+  trimInfo = result
 } else if (trimAlpha && format !== 'png') {
   console.log('')
   console.log('[WARN] trim-alpha 仅支持 PNG 格式，跳过')
@@ -634,6 +643,11 @@ if (trimAlpha && format === 'png') {
 if (finalWidth > 0) {
   console.log('')
   console.log(`最终帧尺寸: ${finalWidth}x${finalHeight}`)
+}
+
+if (trimInfo && trimInfo.sourceWidth > 0) {
+  console.log(`源画布尺寸: ${trimInfo.sourceWidth}x${trimInfo.sourceHeight}`)
+  console.log(`裁剪区域: x=${trimInfo.trimBox.x} y=${trimInfo.trimBox.y} w=${trimInfo.trimBox.w} h=${trimInfo.trimBox.h}`)
 }
 
 console.log('')

@@ -138,16 +138,32 @@ export function setupExtractFrames(): void {
           trimHeight: info.frameHeight,
         }
 
-        // 尝试从日志中解析 trim 后尺寸
-        const trimMatch = allStdout.match(/Final frame size:\s*(\d+)x(\d+)/i)
+        // 从日志中解析 trim 信息
+        const trimMatch = allStdout.match(/最终帧尺寸:\s*(\d+)x(\d+)/)
         if (trimMatch) {
           result.trimWidth = Number(trimMatch[1])
           result.trimHeight = Number(trimMatch[2])
         }
 
+        // 解析源画布尺寸和裁剪区域
+        let sourceWidth = 0, sourceHeight = 0
+        let trimBoxX = 0, trimBoxY = 0, trimBoxW = 0, trimBoxH = 0
+        const srcMatch = allStdout.match(/源画布尺寸:\s*(\d+)x(\d+)/)
+        if (srcMatch) {
+          sourceWidth = Number(srcMatch[1])
+          sourceHeight = Number(srcMatch[2])
+        }
+        const boxMatch = allStdout.match(/裁剪区域:\s*x=(\d+)\s*y=(\d+)\s*w=(\d+)\s*h=(\d+)/)
+        if (boxMatch) {
+          trimBoxX = Number(boxMatch[1])
+          trimBoxY = Number(boxMatch[2])
+          trimBoxW = Number(boxMatch[3])
+          trimBoxH = Number(boxMatch[4])
+        }
+
         // 写入 asset-metadata.json
         const sourceName = basename(options.input, extname(options.input))
-        const metadata = {
+        const metadata: Record<string, unknown> = {
           name: sourceName,
           sourceVideo: options.input,
           createdAt: new Date().toISOString(),
@@ -162,6 +178,17 @@ export function setupExtractFrames(): void {
           includeInRandom: true,
           interruptible: true,
           fpsOverride: null,
+          autoPlayRepeatCount: 1,
+          anchorOffsetX: 0,
+          anchorOffsetY: 0,
+        }
+        // 保存源画布和裁剪信息（用于动作切换时角色锚点对齐）
+        if (sourceWidth > 0 && sourceHeight > 0) {
+          metadata.sourceWidth = sourceWidth
+          metadata.sourceHeight = sourceHeight
+        }
+        if (trimBoxW > 0 && trimBoxH > 0) {
+          metadata.trimBox = { x: trimBoxX, y: trimBoxY, w: trimBoxW, h: trimBoxH }
         }
         try {
           writeFileSync(join(outputDir, 'asset-metadata.json'), JSON.stringify(metadata, null, 2), 'utf-8')

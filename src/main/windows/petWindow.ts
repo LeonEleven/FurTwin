@@ -4,6 +4,7 @@ import { existsSync, readdirSync, statSync } from 'fs'
 import { IPC_CHANNELS, type DragPayload } from '../../shared/types'
 import { isControlPanelVisible, showControlPanel, hideControlPanel } from './controlPanel'
 import { loadAssetInfo, getActiveAssetId } from '../utils/assetInfo'
+import { isAutoBehaviorActive } from '../behavior'
 
 const isDev = !app.isPackaged
 const GENERATED_DIR = join(process.cwd(), 'src/renderer/public/assets/actions/idle/generated')
@@ -122,23 +123,43 @@ export function getPetWindow(): BrowserWindow | null {
 }
 
 export function setupWindowResize(): void {
-  ipcMain.on(IPC_CHANNELS.RESIZE_WINDOW, (_event, width: number, height: number) => {
+  ipcMain.on(IPC_CHANNELS.RESIZE_WINDOW, (_event, width: number, height: number, oldAnchorX?: number, oldAnchorY?: number, newAnchorX?: number, newAnchorY?: number) => {
     if (!petWindow || petWindow.isDestroyed()) return
     const w = Math.max(1, Math.round(Number(width)))
     const h = Math.max(1, Math.round(Number(height)))
     if (!Number.isFinite(w) || !Number.isFinite(h)) return
     try {
-      const [cx, cy] = petWindow.getPosition()
-      const [cw, ch] = petWindow.getSize()
-      const centerX = cx + Math.round(cw / 2)
-      const bottomY = cy + ch
-      let newX = centerX - Math.round(w / 2)
-      let newY = bottomY - h
-      const display = screen.getDisplayMatching({ x: cx, y: cy, width: cw, height: ch })
+      const bounds = petWindow.getBounds()
+      const display = screen.getDisplayMatching(bounds)
       const wa = display.workArea
+
+      let newX: number
+      let newY: number
+      let mode: string
+
+      const hasOldAnchor = Number.isFinite(oldAnchorX) && Number.isFinite(oldAnchorY) && oldAnchorX! >= 0 && oldAnchorY! >= 0
+      const hasNewAnchor = Number.isFinite(newAnchorX) && Number.isFinite(newAnchorY) && newAnchorX! >= 0 && newAnchorY! >= 0
+
+      if (hasOldAnchor && hasNewAnchor) {
+        // Anchor-based alignment: keep the character anchor at the same screen position
+        mode = 'anchor'
+        const oldAnchorScreenX = bounds.x + oldAnchorX!
+        const oldAnchorScreenY = bounds.y + oldAnchorY!
+        newX = Math.round(oldAnchorScreenX - newAnchorX!)
+        newY = Math.round(oldAnchorScreenY - newAnchorY!)
+      } else {
+        // Bottom-center fallback: preserve window's bottom-center point
+        mode = 'bottom-center-fallback'
+        const oldCenterX = bounds.x + Math.round(bounds.width / 2)
+        const oldBottomY = bounds.y + bounds.height
+        newX = oldCenterX - Math.round(w / 2)
+        newY = oldBottomY - h
+      }
+
       const clampedX = Math.max(wa.x, Math.min(newX, wa.x + wa.width - w))
       const clampedY = Math.max(wa.y, Math.min(newY, wa.y + wa.height - h))
-      console.log(`[petWindow] resize: ${w}x${h} pos=(${clampedX},${clampedY}) workArea=(${wa.x},${wa.y},${wa.width},${wa.height})`)
+      const clamped = clampedX !== newX || clampedY !== newY
+      console.log(`[petWindow] resize(${mode}): ${w}x${h} oldBounds=(${bounds.x},${bounds.y},${bounds.width}x${bounds.height}) oldAnchor=(${oldAnchorX ?? '-'},${oldAnchorY ?? '-'}) newAnchor=(${newAnchorX ?? '-'},${newAnchorY ?? '-'}) → newPos=(${newX},${newY}) final=(${clampedX},${clampedY})${clamped ? ' CLAMPED' : ''}`)
       petWindow.setBounds({ x: clampedX, y: clampedY, width: w, height: h })
     } catch {}
   })
@@ -177,6 +198,10 @@ export function setupPetDrag(): void {
 
   ipcMain.on(IPC_CHANNELS.PET_DRAG_END, () => {
     isDragging = false
+    if (petWindow && !petWindow.isDestroyed()) {
+      const bounds = petWindow.getBounds()
+      console.log(`[petWindow] drag end: bounds=(${bounds.x},${bounds.y}) ${bounds.width}x${bounds.height}`)
+    }
   })
 }
 
@@ -197,12 +222,22 @@ export function setupContextMenu(): void {
         }))
       : [{ label: '（暂无动作）', enabled: false }]
 
+    const autoEnabled = isAutoBehaviorActive()
+
     const template: Electron.MenuItemConstructorOptions[] = [
       {
         label: visible ? '隐藏控制面板' : '显示控制面板',
         click: () => {
           if (visible) hideControlPanel()
           else showControlPanel()
+        },
+      },
+      {
+        label: '自动行为',
+        type: 'checkbox',
+        checked: autoEnabled,
+        click: () => {
+          ipcMain.emit(IPC_CHANNELS.TOGGLE_AUTO_BEHAVIOR, null, { enabled: !autoEnabled })
         },
       },
       { type: 'separator' },

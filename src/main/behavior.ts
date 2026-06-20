@@ -14,15 +14,18 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../shared/types'
-import { loadAssetInfo, getActiveAssetId, toFramesDir, type AssetInfo } from './utils/assetInfo'
+import { loadAssetInfo, getActiveAssetId, toFramesDir, computeDisplayAnchor, type AssetInfo } from './utils/assetInfo'
 import { getControlPanel } from './windows/controlPanel'
 
 // ─── Constants ──────────────────────────────────────────
 const STARTUP_DELAY = 3_000       // Wait for renderer to initialize before first action
-const INITIAL_DELAY = 30_000      // First auto-behavior after startup
-const MIN_INTERVAL = 60_000       // Min interval between random inserts
-const MAX_INTERVAL = 120_000      // Max interval between random inserts
-const PAUSE_DURATION = 120_000    // Pause after manual interaction
+
+// Default parameter values (can be overridden via local.config.json)
+const DEFAULT_FIRST_DELAY_SEC = 30
+const DEFAULT_MIN_INTERVAL_SEC = 60
+const DEFAULT_MAX_INTERVAL_SEC = 120
+const DEFAULT_MANUAL_PAUSE_SEC = 120
+const MIN_IDLE_DWELL_SEC = 8  // Minimum time to stay on idle before next auto-insert
 
 const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
 const LOCAL_CONFIG_PATH = resolve('src/renderer/public/assets/actions/idle/local.config.json')
@@ -33,6 +36,40 @@ let autoBehaviorEnabled = true
 let pauseUntil = 0
 let autoTimer: ReturnType<typeof setTimeout> | null = null
 let isAutoPlaying = false  // Currently playing a random auto-inserted action
+let autoPlayRepeatRemaining = 0  // Remaining repeat count for current auto-insert
+let currentAutoInsertConfig: AnimConfig | null = null  // Config for replaying
+
+// ─── Configurable Parameters ────────────────────────────
+
+interface BehaviorParams {
+  firstDelaySec: number
+  minIntervalSec: number
+  maxIntervalSec: number
+  manualPauseSec: number
+}
+
+function readBehaviorParams(): BehaviorParams {
+  const config = readLocalConfig()
+  return {
+    firstDelaySec: Number.isFinite(config.autoBehaviorFirstDelaySec) && config.autoBehaviorFirstDelaySec >= 0
+      ? config.autoBehaviorFirstDelaySec : DEFAULT_FIRST_DELAY_SEC,
+    minIntervalSec: Number.isFinite(config.autoBehaviorMinIntervalSec) && config.autoBehaviorMinIntervalSec >= 0
+      ? config.autoBehaviorMinIntervalSec : DEFAULT_MIN_INTERVAL_SEC,
+    maxIntervalSec: Number.isFinite(config.autoBehaviorMaxIntervalSec) && config.autoBehaviorMaxIntervalSec >= 0
+      ? config.autoBehaviorMaxIntervalSec : DEFAULT_MAX_INTERVAL_SEC,
+    manualPauseSec: Number.isFinite(config.autoBehaviorManualPauseSec) && config.autoBehaviorManualPauseSec >= 0
+      ? config.autoBehaviorManualPauseSec : DEFAULT_MANUAL_PAUSE_SEC,
+  }
+}
+
+function getParams(): BehaviorParams {
+  const p = readBehaviorParams()
+  // Ensure min <= max
+  if (p.minIntervalSec > p.maxIntervalSec) {
+    p.maxIntervalSec = p.minIntervalSec
+  }
+  return p
+}
 
 // ─── Persistence ────────────────────────────────────────
 
@@ -95,6 +132,7 @@ function scanValidAssets(): ValidAsset[] {
 // ─── Idle Fallback Selection ────────────────────────────
 
 function assetToAnimConfig(asset: ValidAsset): AnimConfig {
+  const anchor = computeDisplayAnchor(asset.info)
   return {
     name: asset.info.name,
     label: asset.info.name,
@@ -107,6 +145,8 @@ function assetToAnimConfig(asset: ValidAsset): AnimConfig {
     frameWidth: asset.info.frameWidth,
     frameHeight: asset.info.frameHeight,
     framePattern: `{}.${asset.info.format}`,
+    anchorX: anchor?.anchorX,
+    anchorY: anchor?.anchorY,
   }
 }
 
@@ -160,7 +200,7 @@ export function selectIdleFallback(): AnimConfig | null {
 
 // ─── Random Candidate Selection ─────────────────────────
 
-function selectRandomCandidate(): AnimConfig | null {
+function selectRandomCandidate(): { config: AnimConfig; repeatCount: number } | null {
   const assets = scanValidAssets()
   if (assets.length === 0) return null
 
@@ -181,21 +221,27 @@ function selectRandomCandidate(): AnimConfig | null {
   }
 
   const pick = candidates[Math.floor(Math.random() * candidates.length)]
-  console.log(`[behavior] random candidate: "${pick.info.name}" (${pick.info.actionType})`)
+  console.log(`[behavior] random candidate: "${pick.info.name}" (${pick.info.actionType}) repeat=${pick.info.autoPlayRepeatCount}`)
 
-  // Build AnimConfig with loop=false for auto-insert (play once)
+  // Build AnimConfig with loop=false for auto-insert (play once per repeat)
+  const anchor = computeDisplayAnchor(pick.info)
   return {
-    name: pick.info.name,
-    label: pick.info.name,
-    framesDir: toFramesDir(pick.path),
-    fps: pick.info.fpsOverride ?? 12,
-    scale: 0.5,
-    displayScale: pick.info.displayScale,
-    loop: false, // auto-insert plays once
-    frameCount: pick.info.frameCount,
-    frameWidth: pick.info.frameWidth,
-    frameHeight: pick.info.frameHeight,
-    framePattern: `{}.${pick.info.format}`,
+    config: {
+      name: pick.info.name,
+      label: pick.info.name,
+      framesDir: toFramesDir(pick.path),
+      fps: pick.info.fpsOverride ?? 12,
+      scale: 0.5,
+      displayScale: pick.info.displayScale,
+      loop: false, // auto-insert plays once per repeat
+      frameCount: pick.info.frameCount,
+      frameWidth: pick.info.frameWidth,
+      frameHeight: pick.info.frameHeight,
+      framePattern: `{}.${pick.info.format}`,
+      anchorX: anchor?.anchorX,
+      anchorY: anchor?.anchorY,
+    },
+    repeatCount: Math.max(1, Math.round(pick.info.autoPlayRepeatCount)),
   }
 }
 
@@ -230,6 +276,13 @@ function notifyControlPanel(): void {
   }
 }
 
+function notifyAutoPlaying(name: string | null): void {
+  const cp = getControlPanel()
+  if (cp && !cp.isDestroyed()) {
+    try { cp.webContents.send(IPC_CHANNELS.AUTO_PLAYING_CHANGED, name) } catch {}
+  }
+}
+
 // ─── Behavior Logic ─────────────────────────────────────
 
 function isPaused(): boolean {
@@ -241,11 +294,27 @@ function getRemainingPause(): number {
 }
 
 function randomInterval(): number {
-  return MIN_INTERVAL + Math.random() * (MAX_INTERVAL - MIN_INTERVAL)
+  const p = getParams()
+  return (p.minIntervalSec + Math.random() * (p.maxIntervalSec - p.minIntervalSec)) * 1000
+}
+
+/**
+ * Calculate idle one-loop duration in ms.
+ * Uses the current idle fallback's frameCount and fps.
+ */
+function idleOneLoopDuration(): number {
+  const idle = selectIdleFallback()
+  if (!idle) return MIN_IDLE_DWELL_SEC * 1000
+  const fps = idle.fps || 12
+  const duration = (idle.frameCount / fps) * 1000
+  return Math.max(duration, MIN_IDLE_DWELL_SEC * 1000)
 }
 
 function playIdle(): void {
   isAutoPlaying = false
+  currentAutoInsertConfig = null
+  autoPlayRepeatRemaining = 0
+  notifyAutoPlaying(null) // clear auto-playing indicator
   const idle = selectIdleFallback()
   if (idle) {
     console.log('[behavior] switching to idle fallback')
@@ -284,17 +353,21 @@ function tick(): void {
   }
 
   // Pick a random candidate
-  const candidate = selectRandomCandidate()
-  if (!candidate) {
+  const result = selectRandomCandidate()
+  if (!result) {
     console.log('[behavior] no candidates, retrying later')
-    scheduleNext(MIN_INTERVAL)
+    const p = getParams()
+    scheduleNext(p.minIntervalSec * 1000)
     return
   }
 
   // Play the random action
   isAutoPlaying = true
-  console.log(`[behavior] auto-playing "${candidate.name}" (play once)`)
-  switchAnimRuntime(candidate)
+  autoPlayRepeatRemaining = result.repeatCount - 1  // -1 because we play once now
+  currentAutoInsertConfig = result.config
+  notifyAutoPlaying(result.config.name)
+  console.log(`[behavior] auto-playing "${result.config.name}" (repeat ${result.repeatCount}x)`)
+  switchAnimRuntime(result.config)
   // Playback complete will be handled by ANIM_PLAYBACK_COMPLETE from pet
 }
 
@@ -307,11 +380,26 @@ export function onPlaybackComplete(): void {
     return
   }
 
+  if (autoPlayRepeatRemaining > 0 && currentAutoInsertConfig) {
+    // Replay the same action
+    autoPlayRepeatRemaining--
+    console.log(`[behavior] replaying "${currentAutoInsertConfig.name}" (${autoPlayRepeatRemaining} repeats left)`)
+    switchAnimRuntime(currentAutoInsertConfig)
+    return
+  }
+
   console.log('[behavior] auto-insert finished, returning to idle')
+  currentAutoInsertConfig = null
+  autoPlayRepeatRemaining = 0
   playIdle()
 
   if (autoBehaviorEnabled) {
-    scheduleNext()
+    // Ensure next auto-insert doesn't interrupt idle before one full loop
+    const idleDwell = idleOneLoopDuration()
+    const randomDelay = randomInterval()
+    const nextDelay = Math.max(randomDelay, idleDwell)
+    console.log(`[behavior] idle dwell protection: random=${Math.round(randomDelay/1000)}s idleDwell=${Math.round(idleDwell/1000)}s → next=${Math.round(nextDelay/1000)}s`)
+    scheduleNext(nextDelay)
   }
 }
 
@@ -320,8 +408,10 @@ export function onPlaybackComplete(): void {
  * Pauses auto-behavior.
  */
 export function pauseAutoBehavior(): void {
-  pauseUntil = Date.now() + PAUSE_DURATION
-  console.log(`[behavior] paused for ${PAUSE_DURATION / 1000}s (manual action)`)
+  const p = getParams()
+  const pauseMs = p.manualPauseSec * 1000
+  pauseUntil = Date.now() + pauseMs
+  console.log(`[behavior] paused for ${p.manualPauseSec}s (manual action)`)
 
   // If currently auto-playing, let it finish naturally but don't schedule next
   // The idle fallback will be restored after pause expires via scheduleNext
@@ -331,14 +421,15 @@ export function pauseAutoBehavior(): void {
 
 export function initBehavior(): void {
   autoBehaviorEnabled = loadAutoBehaviorEnabled()
-  console.log(`[behavior] init: autoBehaviorEnabled=${autoBehaviorEnabled}`)
+  const p = getParams()
+  console.log(`[behavior] init: autoBehaviorEnabled=${autoBehaviorEnabled} params=${JSON.stringify(p)}`)
 
   if (autoBehaviorEnabled) {
     // Delay to let pet renderer initialize and show initial config
     console.log(`[behavior] waiting ${STARTUP_DELAY / 1000}s before first auto-action`)
     setTimeout(() => {
       playIdle()
-      scheduleNext(INITIAL_DELAY)
+      scheduleNext(p.firstDelaySec * 1000)
     }, STARTUP_DELAY)
   }
 }
@@ -350,8 +441,9 @@ export function toggleAutoBehavior(enabled: boolean): void {
 
   if (enabled) {
     // Resume: play idle and schedule next
+    const p = getParams()
     playIdle()
-    scheduleNext(INITIAL_DELAY)
+    scheduleNext(p.firstDelaySec * 1000)
   } else {
     // Stop: clear timer, don't change current pet animation
     if (autoTimer) {
@@ -381,5 +473,21 @@ export function setupBehaviorIPC(): void {
   ipcMain.on(IPC_CHANNELS.TOGGLE_AUTO_BEHAVIOR, (_event, payload: { enabled: boolean }) => {
     if (typeof payload?.enabled !== 'boolean') return
     toggleAutoBehavior(payload.enabled)
+  })
+
+  // Control panel saves behavior params
+  ipcMain.on(IPC_CHANNELS.SAVE_BEHAVIOR_PARAMS, (_event, payload: Record<string, number>) => {
+    if (!payload) return
+    try {
+      const config = readLocalConfig()
+      if (Number.isFinite(payload.firstDelaySec) && payload.firstDelaySec >= 0) config.autoBehaviorFirstDelaySec = payload.firstDelaySec
+      if (Number.isFinite(payload.minIntervalSec) && payload.minIntervalSec >= 0) config.autoBehaviorMinIntervalSec = payload.minIntervalSec
+      if (Number.isFinite(payload.maxIntervalSec) && payload.maxIntervalSec >= 0) config.autoBehaviorMaxIntervalSec = payload.maxIntervalSec
+      if (Number.isFinite(payload.manualPauseSec) && payload.manualPauseSec >= 0) config.autoBehaviorManualPauseSec = payload.manualPauseSec
+      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+      console.log(`[behavior] params saved: ${JSON.stringify(payload)}`)
+    } catch (e) {
+      console.warn('[behavior] failed to save params:', e)
+    }
   })
 }

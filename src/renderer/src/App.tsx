@@ -8,7 +8,10 @@ interface GeneratedAsset {
   frameHeight: number; format: string; modifiedAt: number; displayScale: number;
   isActive?: boolean
   actionType: string; loop: boolean; isDefault: boolean;
-  includeInRandom: boolean; interruptible: boolean; fpsOverride: number | null
+  includeInRandom: boolean; interruptible: boolean; fpsOverride: number | null;
+  autoPlayRepeatCount: number
+  sourceWidth: number | null; sourceHeight: number | null;
+  trimBox: { x: number; y: number; w: number; h: number } | null
 }
 
 interface ExtractResult {
@@ -43,6 +46,11 @@ export function App() {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [autoBehaviorEnabled, setAutoBehaviorEnabled] = useState(true)
+  const [behaviorParams, setBehaviorParams] = useState({
+    firstDelaySec: 30, minIntervalSec: 60, maxIntervalSec: 120, manualPauseSec: 120,
+  })
+  const [showBehaviorParams, setShowBehaviorParams] = useState(false)
+  const [autoPlayingName, setAutoPlayingName] = useState<string | null>(null)
 
   const logRef = useRef<HTMLDivElement>(null)
 
@@ -86,7 +94,15 @@ export function App() {
     return off
   }, [])
 
-  // Read initial auto-behavior state from local.config.json
+  // Listen for auto-playing state (runtime indicator)
+  useEffect(() => {
+    const off = window.controlAPI.onAutoPlayingChanged((name) => {
+      setAutoPlayingName(name)
+    })
+    return off
+  }, [])
+
+  // Read initial auto-behavior state + params from local.config.json
   useEffect(() => {
     fetch('./assets/actions/idle/local.config.json?t=' + Date.now(), { cache: 'no-store' })
       .then(r => r.ok ? r.json() : {})
@@ -94,6 +110,12 @@ export function App() {
         if (typeof config.autoBehaviorEnabled === 'boolean') {
           setAutoBehaviorEnabled(config.autoBehaviorEnabled)
         }
+        setBehaviorParams(prev => ({
+          firstDelaySec: Number.isFinite(config.autoBehaviorFirstDelaySec) ? config.autoBehaviorFirstDelaySec : prev.firstDelaySec,
+          minIntervalSec: Number.isFinite(config.autoBehaviorMinIntervalSec) ? config.autoBehaviorMinIntervalSec : prev.minIntervalSec,
+          maxIntervalSec: Number.isFinite(config.autoBehaviorMaxIntervalSec) ? config.autoBehaviorMaxIntervalSec : prev.maxIntervalSec,
+          manualPauseSec: Number.isFinite(config.autoBehaviorManualPauseSec) ? config.autoBehaviorManualPauseSec : prev.manualPauseSec,
+        }))
       })
       .catch(() => {})
   }, [])
@@ -181,7 +203,8 @@ export function App() {
     { value: 'idle', label: '待机', color: '#4caf50' },
     { value: 'play', label: '玩耍', color: '#ff9800' },
     { value: 'sleep', label: '睡觉', color: '#7c4dff' },
-    { value: 'greet', label: '打招呼', color: '#2196f3' },
+    { value: 'eat', label: '进食', color: '#e91e63' },
+    { value: 'clean', label: '清洁', color: '#00bcd4' },
     { value: 'custom', label: '自定义', color: '#9e9e9e' },
   ]
 
@@ -215,11 +238,49 @@ export function App() {
     window.controlAPI.setAssetPlayback(asset.path, { includeInRandom: newVal })
   }, [])
 
+  const handleChangeRepeatCount = useCallback((asset: GeneratedAsset, value: string) => {
+    const num = parseInt(value, 10)
+    if (!Number.isFinite(num) || num < 1) return
+    const clamped = Math.min(10, Math.max(1, num))
+    setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, autoPlayRepeatCount: clamped } : a))
+    window.controlAPI.setAssetPlayback(asset.path, { autoPlayRepeatCount: clamped })
+  }, [])
+
+  const handleRebuildAnchor = useCallback(async (asset: GeneratedAsset) => {
+    const res = await window.controlAPI.rebuildAnchor(asset.path, asset.id)
+    if (res.ok && res.rebuilt) {
+      refreshAssets()
+    } else if (res.ok && !res.rebuilt) {
+      alert('无法重建：源视频不存在或已有对齐数据。')
+    } else {
+      alert(`重建失败：${res.error}`)
+    }
+  }, [refreshAssets])
+
   const handleToggleAutoBehavior = useCallback(() => {
     const newVal = !autoBehaviorEnabled
     setAutoBehaviorEnabled(newVal)
     window.controlAPI.toggleAutoBehavior(newVal)
   }, [autoBehaviorEnabled])
+
+  const handleBehaviorParamChange = useCallback((key: string, value: string) => {
+    const num = parseInt(value, 10)
+    if (!Number.isFinite(num) || num < 0) return
+    setBehaviorParams(prev => ({ ...prev, [key]: num }))
+  }, [])
+
+  const handleSaveBehaviorParams = useCallback(() => {
+    // Auto-correct: ensure min <= max
+    const params = { ...behaviorParams }
+    if (params.minIntervalSec > params.maxIntervalSec) {
+      params.maxIntervalSec = params.minIntervalSec
+      setBehaviorParams(params)
+    }
+    window.controlAPI.saveBehaviorParams(params)
+  }, [behaviorParams])
+
+  // Check if there are any valid random candidates
+  const hasRandomCandidates = assets.some(a => a.includeInRandom && a.actionType !== 'idle')
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '6px 8px', border: '1px solid #ccc',
@@ -333,11 +394,62 @@ export function App() {
 
       {/* 自动行为开关 */}
       <div style={{ marginTop: 12, padding: '8px 12px', backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d0e3f7', fontSize: 13 }}>
-        <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="checkbox" checked={autoBehaviorEnabled} onChange={handleToggleAutoBehavior} style={{ cursor: 'pointer' }} />
-          <span style={{ fontWeight: 600 }}>自动行为</span>
-          <span style={{ color: '#888', fontSize: 11 }}>({autoBehaviorEnabled ? '开启' : '关闭'} — 自动插播随机动作)</span>
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+            <input type="checkbox" checked={autoBehaviorEnabled} onChange={handleToggleAutoBehavior} style={{ cursor: 'pointer' }} />
+            <span style={{ fontWeight: 600 }}>自动行为</span>
+            <span style={{ color: '#888', fontSize: 11 }}>({autoBehaviorEnabled ? '开启' : '关闭'} — 自动插播随机动作)</span>
+          </label>
+          {autoBehaviorEnabled && autoPlayingName && (
+            <span style={{ fontSize: 11, color: '#4a90d9', fontWeight: 600 }}>正在播放：{autoPlayingName}</span>
+          )}
+          <button onClick={(e) => { e.stopPropagation(); setShowBehaviorParams(!showBehaviorParams) }}
+            style={{ fontSize: 11, color: '#4a90d9', cursor: 'pointer', background: 'none', border: 'none', padding: '2px 6px' }}>
+            {showBehaviorParams ? '收起设置 ▲' : '时间设置 ▼'}
+          </button>
+        </div>
+        {showBehaviorParams && (
+          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, fontSize: 12 }}>
+            <div>
+              <label style={{ display: 'block', color: '#666', marginBottom: 2 }}>首次等待(秒)</label>
+              <input type="number" min="0" value={behaviorParams.firstDelaySec}
+                onChange={(e) => handleBehaviorParamChange('firstDelaySec', e.target.value)}
+                onBlur={handleSaveBehaviorParams}
+                style={{ width: '100%', padding: '2px 4px', border: '1px solid #ccc', borderRadius: 3 }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', color: '#666', marginBottom: 2 }}>最小间隔(秒)</label>
+              <input type="number" min="0" value={behaviorParams.minIntervalSec}
+                onChange={(e) => handleBehaviorParamChange('minIntervalSec', e.target.value)}
+                onBlur={handleSaveBehaviorParams}
+                style={{ width: '100%', padding: '2px 4px', border: '1px solid #ccc', borderRadius: 3 }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', color: '#666', marginBottom: 2 }}>最大间隔(秒)</label>
+              <input type="number" min="0" value={behaviorParams.maxIntervalSec}
+                onChange={(e) => handleBehaviorParamChange('maxIntervalSec', e.target.value)}
+                onBlur={handleSaveBehaviorParams}
+                style={{ width: '100%', padding: '2px 4px', border: '1px solid #ccc', borderRadius: 3 }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', color: '#666', marginBottom: 2 }}>手动暂停(秒)</label>
+              <input type="number" min="0" value={behaviorParams.manualPauseSec}
+                onChange={(e) => handleBehaviorParamChange('manualPauseSec', e.target.value)}
+                onBlur={handleSaveBehaviorParams}
+                style={{ width: '100%', padding: '2px 4px', border: '1px solid #ccc', borderRadius: 3 }} />
+            </div>
+          </div>
+        )}
+        {autoBehaviorEnabled && !hasRandomCandidates && (
+          <p style={{ margin: '6px 0 0', fontSize: 11, color: '#e65100' }}>
+            当前没有可自动插播动作。请至少设置一个非待机类型，并勾选「参与自动随机」。
+          </p>
+        )}
+        {behaviorParams.minIntervalSec < 5 && (
+          <p style={{ margin: '4px 0 0', fontSize: 11, color: '#e65100' }}>
+            间隔过短可能导致待机动作来不及完整播放。
+          </p>
+        )}
       </div>
 
       {/* 动作库 */}
@@ -366,8 +478,8 @@ export function App() {
                   backgroundColor: asset.isActive ? '#e8f5e9' : '#fff',
                   borderRadius: 4,
                 }}>
-                  {/* 第一行：名称 + 类型标签 + 状态标记 + 帧信息 */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                  {/* 第一行：名称 + 类型 + 状态标记 + 帧信息 */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
                     {isRenaming ? (
                       <>
                         <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
@@ -390,6 +502,7 @@ export function App() {
                         </select>
                         {asset.isActive && <span style={{ fontSize: 11, color: '#4caf50', fontWeight: 600 }}>● 当前使用</span>}
                         {asset.isDefault && <span style={{ fontSize: 11, color: '#ff9800', fontWeight: 600 }}>★ 默认</span>}
+                        {!asset.sourceWidth && <span style={{ fontSize: 10, color: '#999' }} title="缺少对齐元数据，切换时可能位移">⚠ 未校准</span>}
                         <span style={{ color: '#999', fontSize: 11, marginLeft: 'auto' }}>
                           {timeStr} · {asset.frameCount}帧 · {asset.frameWidth}×{asset.frameHeight} · {asset.format}
                         </span>
@@ -397,14 +510,16 @@ export function App() {
                     )}
                   </div>
 
-                  {/* 第二行：缩放 + 循环 + 操作按钮 + 默认按钮 */}
+                  {/* 第二行：缩放 + 循环 + 参与自动随机 + 自动轮数 */}
                   {!isRenaming && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <label style={{ fontSize: 11, color: '#666' }}>缩放</label>
-                      <input type="number" step="0.1" min="0.1" max="2" value={asset.displayScale}
-                        onChange={(e) => handleDisplayScaleChange(asset.id, e.target.value)}
-                        onBlur={() => handleSaveDisplayScale(asset)}
-                        style={{ width: 48, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3 }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                      <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <span>缩放</span>
+                        <input type="number" step="0.1" min="0.1" max="2" value={asset.displayScale}
+                          onChange={(e) => handleDisplayScaleChange(asset.id, e.target.value)}
+                          onBlur={() => handleSaveDisplayScale(asset)}
+                          style={{ width: 48, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3 }} />
+                      </label>
                       <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
                         <input type="checkbox" checked={asset.loop}
                           onChange={() => handleToggleLoop(asset)}
@@ -417,7 +532,20 @@ export function App() {
                           style={{ cursor: 'pointer' }} />
                         参与自动随机
                       </label>
-                      <span style={{ borderLeft: '1px solid #ddd', height: 14, margin: '0 2px' }} />
+                      {asset.includeInRandom && (
+                        <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <span>自动轮数</span>
+                          <input type="number" min="1" max="10" value={asset.autoPlayRepeatCount}
+                            onChange={(e) => handleChangeRepeatCount(asset, e.target.value)}
+                            style={{ width: 36, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3 }} />
+                        </label>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 第三行：操作按钮 */}
+                  {!isRenaming && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                       <button onClick={() => handleApplyAsset(asset)} style={btnStyle('#4caf50')}>应用</button>
                       <button onClick={() => handleOpenAssetDir(asset)} style={btnStyle('#607d8b')}>打开</button>
                       <button onClick={() => handleStartRename(asset)} style={btnStyle('#2196f3')}>重命名</button>
@@ -427,6 +555,12 @@ export function App() {
                         style={btnStyle(asset.isDefault ? '#ff9800' : '#bbb')}>
                         {asset.isDefault ? '取消默认' : '设为默认'}
                       </button>
+                      {!asset.sourceWidth && (
+                        <button onClick={() => handleRebuildAnchor(asset)}
+                          style={btnStyle('#795548')} title="从源视频重建对齐元数据">
+                          重建对齐
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

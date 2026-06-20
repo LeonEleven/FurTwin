@@ -29,6 +29,8 @@ interface AnimConfig {
   frameWidth: number
   frameHeight: number
   framePattern: string
+  anchorX?: number
+  anchorY?: number
 }
 
 interface PetShapePayload {
@@ -40,7 +42,7 @@ interface PetShapePayload {
   effectiveScale: number
 }
 
-type ActionType = 'idle' | 'play' | 'sleep' | 'greet' | 'custom'
+type ActionType = 'idle' | 'play' | 'sleep' | 'eat' | 'clean' | 'custom'
 
 interface GeneratedAssetInfo {
   id: string
@@ -61,6 +63,10 @@ interface GeneratedAssetInfo {
   includeInRandom: boolean
   interruptible: boolean
   fpsOverride: number | null
+  autoPlayRepeatCount: number
+  sourceWidth: number | null
+  sourceHeight: number | null
+  trimBox: { x: number; y: number; w: number; h: number } | null
 }
 
 declare global {
@@ -71,7 +77,7 @@ declare global {
       dragEnd: () => void
       showContextMenu: () => void
       onMenuAction: (callback: (action: string) => void) => () => void
-      resizeWindow: (width: number, height: number) => void
+      resizeWindow: (width: number, height: number, oldAnchorX?: number, oldAnchorY?: number, newAnchorX?: number, newAnchorY?: number) => void
       reloadAnim: () => void
       onReloadAnim: (callback: () => void) => () => void
       onForceRepaint: (callback: () => void) => () => void
@@ -99,13 +105,17 @@ declare global {
       switchToAsset: (assetPath: string) => void
       setAssetPlayback: (path: string, fields: {
         actionType?: string; loop?: boolean;
-        includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null
+        includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null;
+        autoPlayRepeatCount?: number
       }) => void
       setDefaultAsset: (path: string) => void
+      rebuildAnchor: (path: string, dirName: string) => Promise<{ ok: boolean; rebuilt?: boolean; error?: string }>
       updateActivePlayback: (fields: { loop?: boolean; fps?: number }) => void
       onActiveAssetChanged: (callback: () => void) => () => void
       toggleAutoBehavior: (enabled: boolean) => void
       onAutoBehaviorChanged: (callback: (enabled: boolean) => void) => () => void
+      saveBehaviorParams: (params: { firstDelaySec?: number; minIntervalSec?: number; maxIntervalSec?: number; manualPauseSec?: number }) => void
+      onAutoPlayingChanged: (callback: (name: string | null) => void) => () => void
     }
   }
 }

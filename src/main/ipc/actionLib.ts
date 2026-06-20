@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { writeFileSync } from 'fs'
 import { resolve } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
-import { loadAssetInfo, validateAssetInfo, toFramesDir } from '../utils/assetInfo'
+import { loadAssetInfo, validateAssetInfo, toFramesDir, computeDisplayAnchor } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { pauseAutoBehavior } from '../behavior'
 
@@ -34,6 +34,7 @@ export function setupActionLib(): void {
     }
 
     const framesDir = toFramesDir(assetPath)
+    const anchor = computeDisplayAnchor(info!)
 
     const config: AnimConfig = {
       name: info!.name,
@@ -47,9 +48,11 @@ export function setupActionLib(): void {
       frameWidth: info!.frameWidth,
       frameHeight: info!.frameHeight,
       framePattern: `{}.${info!.format}`,
+      anchorX: anchor?.anchorX,
+      anchorY: anchor?.anchorY,
     }
 
-    console.log(`[actionLib] switch asset id=${dirName} frames=${config.frameCount} display=${config.frameWidth}x${config.frameHeight} scale=${config.displayScale}`)
+    console.log(`[actionLib] switch asset id=${dirName} frames=${config.frameCount} display=${config.frameWidth}x${config.frameHeight} scale=${config.displayScale} anchor=(${anchor?.anchorX?.toFixed(1) ?? '-'},${anchor?.anchorY?.toFixed(1) ?? '-'}) src=${info!.sourceWidth ?? '-'}x${info!.sourceHeight ?? '-'} trim=${JSON.stringify(info!.trimBox ?? '-')}`)
 
     try {
       writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')

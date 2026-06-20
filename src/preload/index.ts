@@ -24,8 +24,8 @@ contextBridge.exposeInMainWorld('petAPI', {
     }
   },
   // --- 窗口尺寸 ---
-  resizeWindow: (width: number, height: number) => {
-    ipcRenderer.send(IPC_CHANNELS.RESIZE_WINDOW, width, height)
+  resizeWindow: (width: number, height: number, oldAnchorX?: number, oldAnchorY?: number, newAnchorX?: number, newAnchorY?: number) => {
+    ipcRenderer.send(IPC_CHANNELS.RESIZE_WINDOW, width, height, oldAnchorX, oldAnchorY, newAnchorX, newAnchorY)
   },
   // --- 重新加载动画 ---
   reloadAnim: () => {
@@ -139,13 +139,17 @@ contextBridge.exposeInMainWorld('controlAPI', {
   // --- 动作播放属性 ---
   setAssetPlayback: (path: string, fields: {
     actionType?: string; loop?: boolean;
-    includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null
+    includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null;
+    autoPlayRepeatCount?: number
   }) => {
     ipcRenderer.send(IPC_CHANNELS.SET_ASSET_PLAYBACK, { path, ...fields })
   },
   // --- 设置默认动作 ---
   setDefaultAsset: (path: string) => {
     ipcRenderer.send(IPC_CHANNELS.SET_DEFAULT_ASSET, { path })
+  },
+  rebuildAnchor: (path: string, dirName: string): Promise<{ ok: boolean; rebuilt?: boolean; error?: string }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.REBUILD_ANCHOR, { path, dirName })
   },
   // --- 更新当前使用动作的播放属性（立即生效） ---
   updateActivePlayback: (fields: { loop?: boolean; fps?: number }) => {
@@ -165,5 +169,13 @@ contextBridge.exposeInMainWorld('controlAPI', {
     const handler = (_: unknown, enabled: boolean) => callback(enabled)
     ipcRenderer.on(IPC_CHANNELS.AUTO_BEHAVIOR_STATE_CHANGED, handler)
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.AUTO_BEHAVIOR_STATE_CHANGED, handler) }
+  },
+  saveBehaviorParams: (params: { firstDelaySec?: number; minIntervalSec?: number; maxIntervalSec?: number; manualPauseSec?: number }) => {
+    ipcRenderer.send(IPC_CHANNELS.SAVE_BEHAVIOR_PARAMS, params)
+  },
+  onAutoPlayingChanged: (callback: (name: string | null) => void) => {
+    const handler = (_: unknown, name: string | null) => callback(name)
+    ipcRenderer.on(IPC_CHANNELS.AUTO_PLAYING_CHANGED, handler)
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.AUTO_PLAYING_CHANGED, handler) }
   },
 })
