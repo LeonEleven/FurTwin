@@ -67,6 +67,8 @@ interface GeneratedAssetInfo {
   sourceWidth: number | null
   sourceHeight: number | null
   trimBox: { x: number; y: number; w: number; h: number } | null
+  anchorOffsetX: number
+  anchorOffsetY: number
 }
 
 declare global {
@@ -106,7 +108,7 @@ declare global {
       setAssetPlayback: (path: string, fields: {
         actionType?: string; loop?: boolean;
         includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null;
-        autoPlayRepeatCount?: number
+        autoPlayRepeatCount?: number; anchorOffsetX?: number; anchorOffsetY?: number
       }) => void
       setDefaultAsset: (path: string) => void
       rebuildAnchor: (path: string, dirName: string) => Promise<{ ok: boolean; rebuilt?: boolean; error?: string }>

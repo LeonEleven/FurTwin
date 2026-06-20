@@ -12,6 +12,7 @@ interface GeneratedAsset {
   autoPlayRepeatCount: number
   sourceWidth: number | null; sourceHeight: number | null;
   trimBox: { x: number; y: number; w: number; h: number } | null
+  anchorOffsetX: number; anchorOffsetY: number
 }
 
 interface ExtractResult {
@@ -51,6 +52,7 @@ export function App() {
   })
   const [showBehaviorParams, setShowBehaviorParams] = useState(false)
   const [autoPlayingName, setAutoPlayingName] = useState<string | null>(null)
+  const [expandingAnchorId, setExpandingAnchorId] = useState<string | null>(null)
 
   const logRef = useRef<HTMLDivElement>(null)
 
@@ -262,6 +264,43 @@ export function App() {
     setAutoBehaviorEnabled(newVal)
     window.controlAPI.toggleAutoBehavior(newVal)
   }, [autoBehaviorEnabled])
+
+  // UI uses visual direction: positive X = right, positive Y = down
+  // Internal anchorOffset is opposite: positive moves anchor right → window moves left → pet moves left
+  // Conversion: internal = -visual
+
+  const handleAnchorOffsetChange = useCallback((asset: GeneratedAsset, axis: 'x' | 'y', visualValue: string) => {
+    const num = parseFloat(visualValue)
+    if (!Number.isFinite(num)) return
+    const clamped = Math.max(-200, Math.min(200, num))
+    // Store as internal value (negated)
+    const internalVal = -clamped
+    if (axis === 'x') {
+      setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, anchorOffsetX: internalVal } : a))
+    } else {
+      setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, anchorOffsetY: internalVal } : a))
+    }
+  }, [])
+
+  const handleSaveAnchorOffset = useCallback((asset: GeneratedAsset) => {
+    window.controlAPI.setAssetPlayback(asset.path, { anchorOffsetX: asset.anchorOffsetX, anchorOffsetY: asset.anchorOffsetY })
+  }, [])
+
+  const handleNudgeAnchor = useCallback((asset: GeneratedAsset, axis: 'x' | 'y', visualDelta: number) => {
+    // visualDelta is in user direction (+5 = right/down)
+    // Internal delta is opposite
+    const internalDelta = -visualDelta
+    const current = axis === 'x' ? asset.anchorOffsetX : asset.anchorOffsetY
+    const newVal = Math.max(-200, Math.min(200, current + internalDelta))
+    const updated = axis === 'x' ? { ...asset, anchorOffsetX: newVal } : { ...asset, anchorOffsetY: newVal }
+    setAssets(prev => prev.map(a => a.id === asset.id ? updated : a))
+    window.controlAPI.setAssetPlayback(asset.path, axis === 'x' ? { anchorOffsetX: newVal } : { anchorOffsetY: newVal })
+  }, [])
+
+  const handleResetAnchorOffset = useCallback((asset: GeneratedAsset) => {
+    setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, anchorOffsetX: 0, anchorOffsetY: 0 } : a))
+    window.controlAPI.setAssetPlayback(asset.path, { anchorOffsetX: 0, anchorOffsetY: 0 })
+  }, [])
 
   const handleBehaviorParamChange = useCallback((key: string, value: string) => {
     const num = parseInt(value, 10)
@@ -561,6 +600,39 @@ export function App() {
                           重建对齐
                         </button>
                       )}
+                      {asset.sourceWidth && (
+                        <button onClick={() => setExpandingAnchorId(expandingAnchorId === asset.id ? null : asset.id)}
+                          style={btnStyle(expandingAnchorId === asset.id ? '#00897b' : '#78909c')}>
+                          {expandingAnchorId === asset.id ? '收起微调 ▲' : '对齐微调 ▼'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {/* 第四行：对齐微调（折叠） */}
+                  {!isRenaming && expandingAnchorId === asset.id && asset.sourceWidth && (
+                    <div style={{ marginTop: 6, padding: '6px 8px', backgroundColor: '#f5f5f5', borderRadius: 4, fontSize: 11 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ color: '#666', fontWeight: 600 }}>水平修正</span>
+                        <button onClick={() => handleNudgeAnchor(asset, 'x', -5)} style={{ ...btnStyle('#bbb'), padding: '1px 6px' }}>←</button>
+                        <input type="number" step="1" value={-asset.anchorOffsetX}
+                          onChange={(e) => handleAnchorOffsetChange(asset, 'x', e.target.value)}
+                          onBlur={() => handleSaveAnchorOffset(asset)}
+                          style={{ width: 52, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3, textAlign: 'center' }} />
+                        <button onClick={() => handleNudgeAnchor(asset, 'x', 5)} style={{ ...btnStyle('#bbb'), padding: '1px 6px' }}>→</button>
+                        <span style={{ borderLeft: '1px solid #ddd', height: 14, margin: '0 2px' }} />
+                        <span style={{ color: '#666', fontWeight: 600 }}>垂直修正</span>
+                        <button onClick={() => handleNudgeAnchor(asset, 'y', -5)} style={{ ...btnStyle('#bbb'), padding: '1px 6px' }}>↑</button>
+                        <input type="number" step="1" value={-asset.anchorOffsetY}
+                          onChange={(e) => handleAnchorOffsetChange(asset, 'y', e.target.value)}
+                          onBlur={() => handleSaveAnchorOffset(asset)}
+                          style={{ width: 52, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3, textAlign: 'center' }} />
+                        <button onClick={() => handleNudgeAnchor(asset, 'y', 5)} style={{ ...btnStyle('#bbb'), padding: '1px 6px' }}>↓</button>
+                        <span style={{ borderLeft: '1px solid #ddd', height: 14, margin: '0 2px' }} />
+                        <button onClick={() => handleResetAnchorOffset(asset)} style={{ ...btnStyle('#ff7043'), padding: '2px 8px' }}>重置微调</button>
+                      </div>
+                      <p style={{ margin: '4px 0 0', color: '#999' }}>
+                        正数向右/向下移动宠物画面，负数向左/向上。修改当前动作时即时生效。
+                      </p>
                     </div>
                   )}
                 </div>

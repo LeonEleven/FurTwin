@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { readdirSync, statSync, existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join, resolve } from 'path'
 import { IPC_CHANNELS } from '../../shared/types'
-import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, type AssetInfo } from '../utils/assetInfo'
+import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, computeDisplayAnchor, toFramesDir, validateAssetInfo, type AssetInfo } from '../utils/assetInfo'
 
 const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
 const METADATA_FILE = 'asset-metadata.json'
@@ -104,7 +104,7 @@ export function setupGeneratedAssets(): void {
   ipcMain.on(IPC_CHANNELS.SET_ASSET_PLAYBACK, (_event, payload: {
     path: string; actionType?: string; loop?: boolean;
     includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null;
-    autoPlayRepeatCount?: number
+    autoPlayRepeatCount?: number; anchorOffsetX?: number; anchorOffsetY?: number
   }) => {
     if (!payload?.path) return
     const metaPath = join(payload.path, METADATA_FILE)
@@ -116,8 +116,38 @@ export function setupGeneratedAssets(): void {
       if (payload.interruptible !== undefined) existing.interruptible = payload.interruptible
       if (payload.fpsOverride !== undefined) existing.fpsOverride = payload.fpsOverride
       if (payload.autoPlayRepeatCount !== undefined) existing.autoPlayRepeatCount = payload.autoPlayRepeatCount
+      if (payload.anchorOffsetX !== undefined) existing.anchorOffsetX = payload.anchorOffsetX
+      if (payload.anchorOffsetY !== undefined) existing.anchorOffsetY = payload.anchorOffsetY
       writeFileSync(metaPath, JSON.stringify(existing, null, 2), 'utf-8')
       console.log(`[generated] updated playback: ${payload.path}`)
+
+      // If this is the active asset and anchor offset changed, update local.config.json and reload pet
+      if (payload.anchorOffsetX !== undefined || payload.anchorOffsetY !== undefined) {
+        const activeId = getActiveAssetId()
+        const dirName = payload.path.split(/[/\\]/).pop()
+        if (activeId && dirName === activeId) {
+          const info = loadAssetInfo(payload.path, dirName!)
+          if (info && !validateAssetInfo(info)) {
+            const anchor = computeDisplayAnchor(info)
+            const config = {
+              name: info.name, label: info.name, framesDir: toFramesDir(payload.path),
+              fps: info.fpsOverride ?? 12, scale: 0.5, displayScale: info.displayScale,
+              loop: info.loop, frameCount: info.frameCount, frameWidth: info.frameWidth,
+              frameHeight: info.frameHeight, framePattern: `{}.${info.format}`,
+              anchorX: anchor?.anchorX, anchorY: anchor?.anchorY,
+            }
+            const localConfigPath = resolve('src/renderer/public/assets/actions/idle/local.config.json')
+            writeFileSync(localConfigPath, JSON.stringify(config, null, 2), 'utf-8')
+            // Notify pet to reload with new anchor
+            BrowserWindow.getAllWindows().forEach(win => {
+              if (!win.isDestroyed()) {
+                try { win.webContents.send(IPC_CHANNELS.RELOAD_ANIM) } catch {}
+              }
+            })
+            console.log(`[generated] active asset anchor updated, pet reloaded`)
+          }
+        }
+      }
     } catch {}
   })
 

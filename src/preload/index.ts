@@ -140,7 +140,7 @@ contextBridge.exposeInMainWorld('controlAPI', {
   setAssetPlayback: (path: string, fields: {
     actionType?: string; loop?: boolean;
     includeInRandom?: boolean; interruptible?: boolean; fpsOverride?: number | null;
-    autoPlayRepeatCount?: number
+    autoPlayRepeatCount?: number; anchorOffsetX?: number; anchorOffsetY?: number
   }) => {
     ipcRenderer.send(IPC_CHANNELS.SET_ASSET_PLAYBACK, { path, ...fields })
   },
