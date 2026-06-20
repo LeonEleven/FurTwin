@@ -3,6 +3,7 @@ import { readdirSync, statSync, existsSync, readFileSync, writeFileSync, rmSync 
 import { join, resolve } from 'path'
 import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, computeDisplayAnchor, toFramesDir, validateAssetInfo, type AssetInfo } from '../utils/assetInfo'
+import { getControlPanel } from '../windows/controlPanel'
 
 const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
 const METADATA_FILE = 'asset-metadata.json'
@@ -71,26 +72,60 @@ export function setupGeneratedAssets(): void {
       return { ok: false, error: 'invalid path' }
     }
 
+    const deletedDirName = resolved.split(/[/\\]/).pop() || ''
+    const wasActive = getActiveAssetId() === deletedDirName
+    const localConfigPath = resolve('src/renderer/public/assets/actions/idle/local.config.json')
+
     try {
       rmSync(resolved, { recursive: true, force: true })
       console.log(`[generated] deleted: ${resolved}`)
 
-      // If this was the active preview, restore demo
-      const localConfigPath = resolve('src/renderer/public/assets/actions/idle/local.config.json')
-      if (existsSync(localConfigPath)) {
-        try {
-          const config = JSON.parse(readFileSync(localConfigPath, 'utf-8'))
-          if (config.framesDir && resolved.includes(config.framesDir.replace('./', '').replace(/\//g, '\\'))) {
-            const { unlinkSync } = require('fs')
-            unlinkSync(localConfigPath)
-            console.log('[generated] deleted active preview, restored demo')
-            BrowserWindow.getAllWindows().forEach(win => {
-              if (!win.isDestroyed()) {
-                try { win.webContents.send(IPC_CHANNELS.RELOAD_ANIM) } catch {}
-              }
-            })
-          }
-        } catch {}
+      if (!wasActive) {
+        // Not the active asset — nothing more to do
+        return { ok: true }
+      }
+
+      // Deleted the active asset — find fallback
+      const remaining = scanGeneratedDir() // already sorted by modifiedAt desc
+      const LOCAL_CONFIG_PATH = localConfigPath
+
+      // Fallback priority: default → idle → any valid → demo
+      let fallback = remaining.find(a => a.isDefault)
+      if (!fallback) fallback = remaining.find(a => a.actionType === 'idle')
+      if (!fallback) fallback = remaining[0] // most recent
+
+      if (fallback) {
+        // Switch to fallback asset
+        const anchor = computeDisplayAnchor(fallback)
+        const config = {
+          name: fallback.name, label: fallback.name, framesDir: toFramesDir(fallback.path),
+          fps: fallback.fpsOverride ?? 12, scale: 0.5, displayScale: fallback.displayScale,
+          loop: fallback.loop, frameCount: fallback.frameCount, frameWidth: fallback.frameWidth,
+          frameHeight: fallback.frameHeight, framePattern: `{}.${fallback.format}`,
+          anchorX: anchor?.anchorX, anchorY: anchor?.anchorY,
+        }
+        writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+        console.log(`[generated] deleted active, switched to fallback: "${fallback.name}" (id=${fallback.id})`)
+      } else {
+        // No remaining assets — delete local.config.json to fall back to demo
+        if (existsSync(LOCAL_CONFIG_PATH)) {
+          const { unlinkSync } = require('fs')
+          unlinkSync(LOCAL_CONFIG_PATH)
+        }
+        console.log('[generated] deleted active, no remaining assets, restored demo')
+      }
+
+      // Notify pet to reload
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) {
+          try { win.webContents.send(IPC_CHANNELS.RELOAD_ANIM) } catch {}
+        }
+      })
+
+      // Notify control panel to refresh
+      const cp = getControlPanel()
+      if (cp && !cp.isDestroyed()) {
+        try { cp.webContents.send(IPC_CHANNELS.ACTIVE_ASSET_CHANGED) } catch {}
       }
 
       return { ok: true }

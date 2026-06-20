@@ -196,9 +196,30 @@ export function App() {
   const handleCancelRename = useCallback(() => { setRenamingId(null); setRenameValue('') }, [])
 
   const handleDeleteAsset = useCallback(async (asset: GeneratedAsset) => {
-    if (!confirm(`确认删除「${asset.name}」？\n\n将删除：${asset.path}\n无法恢复。`)) return
+    let msg = `确认删除「${asset.name}」？\n\n将删除：${asset.path}\n无法恢复。`
+    if (asset.isActive) msg += '\n\n⚠ 该动作正在使用，删除后将自动切换到其他可用动作。'
+    if (asset.isDefault) msg += '\n\n⚠ 该动作是默认动作，删除后将清除默认设置。'
+    if (!confirm(msg)) return
     const res = await window.controlAPI.deleteAsset(asset.path)
     if (res.ok) { refreshAssets() } else { alert(`删除失败：${res.error}`) }
+  }, [refreshAssets])
+
+  const handleExportAsset = useCallback(async (asset: GeneratedAsset) => {
+    const res = await window.controlAPI.exportAssetPackage(asset.path, asset.name)
+    if (res.ok) {
+      alert(`导出成功：${res.path}`)
+    } else if (res.error !== '用户取消') {
+      alert(`导出失败：${res.error}`)
+    }
+  }, [])
+
+  const handleImportAsset = useCallback(async () => {
+    const res = await window.controlAPI.importAssetPackage()
+    if (res.ok) {
+      refreshAssets()
+    } else if (res.error !== '用户取消') {
+      alert(`导入失败：${res.error}`)
+    }
   }, [refreshAssets])
 
   const ACTION_TYPES: Array<{ value: string; label: string; color: string }> = [
@@ -496,7 +517,10 @@ export function App() {
         <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 13, marginTop: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <p style={{ fontWeight: 600, margin: 0 }}>动作库</p>
-            <button onClick={refreshAssets} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>刷新</button>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button onClick={handleImportAsset} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>导入动作包</button>
+              <button onClick={refreshAssets} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>刷新</button>
+            </div>
           </div>
           <div style={{ maxHeight: 400, overflow: 'auto' }}>
             {assets.map((asset) => {
@@ -587,6 +611,7 @@ export function App() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                       <button onClick={() => handleApplyAsset(asset)} style={btnStyle('#4caf50')}>应用</button>
                       <button onClick={() => handleOpenAssetDir(asset)} style={btnStyle('#607d8b')}>打开</button>
+                      <button onClick={() => handleExportAsset(asset)} style={btnStyle('#00897b')}>导出</button>
                       <button onClick={() => handleStartRename(asset)} style={btnStyle('#2196f3')}>重命名</button>
                       <button onClick={() => handleDeleteAsset(asset)} style={btnStyle('#f44336')}>删除</button>
                       <span style={{ borderLeft: '1px solid #ddd', height: 14, margin: '0 2px' }} />

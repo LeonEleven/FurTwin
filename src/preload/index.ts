@@ -151,6 +151,13 @@ contextBridge.exposeInMainWorld('controlAPI', {
   rebuildAnchor: (path: string, dirName: string): Promise<{ ok: boolean; rebuilt?: boolean; error?: string }> => {
     return ipcRenderer.invoke(IPC_CHANNELS.REBUILD_ANCHOR, { path, dirName })
   },
+  // --- 动作包导出/导入 ---
+  exportAssetPackage: (path: string, name: string): Promise<{ ok: boolean; path?: string; error?: string }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.EXPORT_ASSET_PACKAGE, { path, name })
+  },
+  importAssetPackage: (): Promise<{ ok: boolean; dirName?: string; name?: string; error?: string }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.IMPORT_ASSET_PACKAGE)
+  },
   // --- 更新当前使用动作的播放属性（立即生效） ---
   updateActivePlayback: (fields: { loop?: boolean; fps?: number }) => {
     ipcRenderer.send(IPC_CHANNELS.UPDATE_ACTIVE_PLAYBACK, fields)

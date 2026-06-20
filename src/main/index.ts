@@ -6,6 +6,7 @@ import { validateStartupConfig } from './ipc/preview'
 import { initBehavior, setupBehaviorIPC } from './behavior'
 import { setupOpenPath } from './ipc/openPath'
 import { setupGeneratedAssets } from './ipc/generatedAssets'
+import { setupAssetPackage } from './ipc/assetPackage'
 import { setupActionLib } from './ipc/actionLib'
 import { setupPreview } from './ipc/preview'
 import { setupPetShape } from './ipc/petShape'
@@ -32,6 +33,7 @@ app.whenReady().then(() => {
   setupPetShape()
   setupOpenPath()
   setupGeneratedAssets()
+  setupAssetPackage()
   setupActionLib()
 
   // 行为系统（在所有 IPC 注册完成后初始化）
