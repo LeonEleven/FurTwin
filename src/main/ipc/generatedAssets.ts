@@ -1,36 +1,22 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { readdirSync, statSync, existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, computeDisplayAnchor, toFramesDir, validateAssetInfo, type AssetInfo } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { getGeneratedDir, getLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
+import { scanAllActions, type ActionEntry } from '../services/actionRepository'
 
 const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
 
 function scanGeneratedDir(): (AssetInfo & { isActive: boolean; modifiedAt: number })[] {
-  if (!existsSync(GENERATED_DIR)) return []
-
-  const activeId = getActiveAssetId()
-  const entries = readdirSync(GENERATED_DIR, { withFileTypes: true })
-  const assets: (AssetInfo & { isActive: boolean; modifiedAt: number })[] = []
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const dirPath = join(GENERATED_DIR, entry.name)
-    try {
-      const info = loadAssetInfo(dirPath, entry.name)
-      if (info) {
-        const stat = statSync(dirPath)
-        const isActive = activeId !== null && activeId === entry.name
-        assets.push({ ...info, isActive, modifiedAt: stat.mtimeMs })
-      }
-    } catch {}
-  }
-
-  assets.sort((a, b) => b.modifiedAt - a.modifiedAt)
-  return assets
+  const entries = scanAllActions()
+  return entries.map(entry => ({
+    ...entry.info,
+    isActive: entry.isActive,
+    modifiedAt: entry.modifiedAt,
+  }))
 }
 
 export function setupGeneratedAssets(): void {

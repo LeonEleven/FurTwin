@@ -17,6 +17,7 @@ import { IPC_CHANNELS, type AnimConfig } from '../shared/types'
 import { loadAssetInfo, getActiveAssetId, toFramesDir, computeDisplayAnchor, type AssetInfo } from './utils/assetInfo'
 import { getControlPanel } from './windows/controlPanel'
 import { getGeneratedDir, getLocalConfigPath, getPublicDir } from './services/actionPaths'
+import { scanValidActions, type ActionEntry } from './services/actionRepository'
 
 // ─── Constants ──────────────────────────────────────────
 const STARTUP_DELAY = 3_000       // Wait for renderer to initialize before first action
@@ -109,26 +110,12 @@ interface ValidAsset {
 }
 
 function scanValidAssets(): ValidAsset[] {
-  if (!existsSync(GENERATED_DIR)) return []
-  const entries = readdirSync(GENERATED_DIR, { withFileTypes: true })
-  const assets: ValidAsset[] = []
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const dirPath = join(GENERATED_DIR, entry.name)
-    try {
-      const info = loadAssetInfo(dirPath, entry.name)
-      if (!info) continue
-      // Verify frames exist
-      const framesDir = join(PUBLIC_DIR, toFramesDir(dirPath).replace(/^\.\//, ''))
-      if (!existsSync(framesDir)) continue
-      const hasFrames = readdirSync(framesDir).some(f => f.endsWith('.png') || f.endsWith('.webp'))
-      if (!hasFrames) continue
-      assets.push({ info, path: dirPath, dirName: entry.name })
-    } catch {}
-  }
-
-  return assets
+  const entries = scanValidActions()
+  return entries.map(entry => ({
+    info: entry.info,
+    path: entry.path,
+    dirName: entry.id,
+  }))
 }
 
 // ─── Idle Fallback Selection ────────────────────────────

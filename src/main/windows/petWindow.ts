@@ -1,14 +1,11 @@
 import { app, BrowserWindow, screen, ipcMain, Menu } from 'electron'
 import { join } from 'path'
-import { existsSync, readdirSync, statSync } from 'fs'
 import { IPC_CHANNELS, type DragPayload } from '../../shared/types'
 import { isControlPanelVisible, showControlPanel, hideControlPanel } from './controlPanel'
-import { loadAssetInfo, getActiveAssetId } from '../utils/assetInfo'
 import { isAutoBehaviorActive } from '../behavior'
-import { getGeneratedDir } from '../services/actionPaths'
+import { scanAllActions } from '../services/actionRepository'
 
 const isDev = !app.isPackaged
-const GENERATED_DIR = getGeneratedDir()
 
 let petWindow: BrowserWindow | null = null
 let moveDebounce: ReturnType<typeof setTimeout> | null = null
@@ -23,30 +20,13 @@ interface AssetEntry {
 
 /** Scan generated directory for assets using shared loadAssetInfo */
 function scanAssets(): AssetEntry[] {
-  if (!existsSync(GENERATED_DIR)) return []
-  const activeId = getActiveAssetId()
-  const entries = readdirSync(GENERATED_DIR, { withFileTypes: true })
-  const assets: AssetEntry[] = []
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const dirPath = join(GENERATED_DIR, entry.name)
-    try {
-      const info = loadAssetInfo(dirPath, entry.name)
-      if (info) {
-        const isActive = activeId !== null && activeId === entry.name
-        assets.push({ id: entry.name, path: dirPath, name: info.name, isActive })
-      }
-    } catch {}
-  }
-
-  assets.sort((a, b) => {
-    const sa = statSync(a.path).mtimeMs
-    const sb = statSync(b.path).mtimeMs
-    return sb - sa
-  })
-
-  return assets
+  const entries = scanAllActions()
+  return entries.map(entry => ({
+    id: entry.id,
+    path: entry.path,
+    name: entry.info.name,
+    isActive: entry.isActive,
+  }))
 }
 
 export function createPetWindow(): BrowserWindow {
