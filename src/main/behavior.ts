@@ -571,6 +571,41 @@ export function setupBehaviorIPC(): void {
       if (Number.isFinite(payload.manualPauseSec) && payload.manualPauseSec >= 0) config.autoBehaviorManualPauseSec = payload.manualPauseSec
       writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
       console.log(`[behavior] params saved: ${JSON.stringify(payload)}`)
+
+      // Reschedule with new params if auto-behavior is enabled
+      if (autoBehaviorEnabled) {
+        // Clear old pause — use new manualPauseSec if it was changed,
+        // but don't force a pause if user is just adjusting intervals
+        // Only clear pause if it was from a manual action and new params suggest shorter pause
+        const oldPauseRemaining = getRemainingPause()
+        if (oldPauseRemaining > 0) {
+          const newPauseMs = (config.autoBehaviorManualPauseSec ?? DEFAULT_MANUAL_PAUSE_SEC) * 1000
+          // If new manual pause is shorter than old remaining, reduce it
+          if (newPauseMs < oldPauseRemaining) {
+            pauseUntil = Date.now() + newPauseMs
+            console.log(`[behavior] adjusted pause: ${Math.round(newPauseMs / 1000)}s (was ${Math.round(oldPauseRemaining / 1000)}s remaining)`)
+          }
+        }
+
+        // Clear old timer and reschedule
+        if (autoTimer) {
+          clearTimeout(autoTimer)
+          autoTimer = null
+        }
+
+        // Reschedule with new params
+        if (!isPaused()) {
+          // Not paused — schedule next with new interval
+          const p = getParams()
+          scheduleNext(p.firstDelaySec * 1000)
+          console.log(`[behavior] rescheduled after settings change: next in ${p.firstDelaySec}s`)
+        } else {
+          // Still paused — schedule for when pause ends
+          const remaining = getRemainingPause()
+          scheduleNext(remaining)
+          console.log(`[behavior] rescheduled after settings change: paused for ${Math.round(remaining / 1000)}s more`)
+        }
+      }
     } catch (e) {
       console.warn('[behavior] failed to save params:', e)
     }
