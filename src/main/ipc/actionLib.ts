@@ -1,12 +1,12 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { writeFileSync } from 'fs'
-import { resolve } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
 import { loadAssetInfo, validateAssetInfo, toFramesDir, computeDisplayAnchor } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { pauseAutoBehavior } from '../behavior'
+import { getLocalConfigPath } from '../services/actionPaths'
 
-const LOCAL_CONFIG_PATH = resolve('src/renderer/public/assets/actions/idle/local.config.json')
+const LOCAL_CONFIG_PATH = getLocalConfigPath()
 
 function notifyPetReload() {
   BrowserWindow.getAllWindows().forEach(win => {

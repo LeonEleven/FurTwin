@@ -5,9 +5,10 @@ import { IPC_CHANNELS, type DragPayload } from '../../shared/types'
 import { isControlPanelVisible, showControlPanel, hideControlPanel } from './controlPanel'
 import { loadAssetInfo, getActiveAssetId } from '../utils/assetInfo'
 import { isAutoBehaviorActive } from '../behavior'
+import { getGeneratedDir } from '../services/actionPaths'
 
 const isDev = !app.isPackaged
-const GENERATED_DIR = join(process.cwd(), 'src/renderer/public/assets/actions/idle/generated')
+const GENERATED_DIR = getGeneratedDir()
 
 let petWindow: BrowserWindow | null = null
 let moveDebounce: ReturnType<typeof setTimeout> | null = null

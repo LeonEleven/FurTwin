@@ -1,11 +1,12 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { readdirSync, statSync, existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
-import { join, resolve } from 'path'
+import { join } from 'path'
 import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, computeDisplayAnchor, toFramesDir, validateAssetInfo, type AssetInfo } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
+import { getGeneratedDir, getLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
 
-const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
+const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
 
 function scanGeneratedDir(): (AssetInfo & { isActive: boolean; modifiedAt: number })[] {
@@ -66,7 +67,7 @@ export function setupGeneratedAssets(): void {
   ipcMain.handle(IPC_CHANNELS.DELETE_ASSET, (_event, payload: { path: string }) => {
     if (!payload?.path || !existsSync(payload.path)) return { ok: false, error: 'path not found' }
 
-    const resolved = resolve(payload.path)
+    const resolved = join(payload.path)
     if (!resolved.startsWith(GENERATED_DIR)) {
       console.warn('[generated] delete rejected: path outside generated dir')
       return { ok: false, error: 'invalid path' }
@@ -74,7 +75,7 @@ export function setupGeneratedAssets(): void {
 
     const deletedDirName = resolved.split(/[/\\]/).pop() || ''
     const wasActive = getActiveAssetId() === deletedDirName
-    const localConfigPath = resolve('src/renderer/public/assets/actions/idle/local.config.json')
+    const localConfigPath = getLocalConfigPath()
 
     try {
       rmSync(resolved, { recursive: true, force: true })
@@ -173,8 +174,7 @@ export function setupGeneratedAssets(): void {
               frameHeight: info.frameHeight, framePattern: `{}.${info.format}`,
               anchorX: anchor?.anchorX, anchorY: anchor?.anchorY,
             }
-            const localConfigPath = resolve('src/renderer/public/assets/actions/idle/local.config.json')
-            writeFileSync(localConfigPath, JSON.stringify(config, null, 2), 'utf-8')
+            writeFileSync(getLocalConfigPath(), JSON.stringify(config, null, 2), 'utf-8')
             // Notify pet to reload with new anchor
             BrowserWindow.getAllWindows().forEach(win => {
               if (!win.isDestroyed()) {

@@ -5,8 +5,8 @@
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { resolve } from 'path'
 import { execSync } from 'child_process'
+import { getGeneratedDir, getLocalConfigPath, toRendererPath } from '../services/actionPaths'
 
 const METADATA_FILE = 'asset-metadata.json'
 
@@ -179,13 +179,11 @@ export function validateAssetInfo(info: AssetInfo | null): string | null {
  * Convert absolute asset path to renderer-relative framesDir.
  */
 export function toFramesDir(assetPath: string): string {
-  const publicDir = resolve('src/renderer/public')
-  const relative = assetPath.replace(publicDir, '').replace(/\\/g, '/')
-  return '.' + relative
+  return toRendererPath(assetPath)
 }
 
-const LOCAL_CONFIG_PATH = resolve('src/renderer/public/assets/actions/idle/local.config.json')
-const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
+const LOCAL_CONFIG_PATH = getLocalConfigPath()
+const GENERATED_DIR = getGeneratedDir()
 
 /**
  * Compute the character anchor point in display-space pixels.

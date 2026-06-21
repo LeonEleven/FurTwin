@@ -300,9 +300,9 @@ export function App() {
   const handleAnchorOffsetChange = useCallback((asset: GeneratedAsset, axis: 'x' | 'y', visualValue: string) => {
     const num = parseFloat(visualValue)
     if (!Number.isFinite(num)) return
-    const clamped = Math.max(-200, Math.min(200, num))
+    // No artificial clamp — only prevent NaN/Infinity
     // Store as internal value (negated)
-    const internalVal = -clamped
+    const internalVal = -num
     if (axis === 'x') {
       setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, anchorOffsetX: internalVal } : a))
     } else {
@@ -319,7 +319,8 @@ export function App() {
     // Internal delta is opposite
     const internalDelta = -visualDelta
     const current = axis === 'x' ? asset.anchorOffsetX : asset.anchorOffsetY
-    const newVal = Math.max(-200, Math.min(200, current + internalDelta))
+    // No artificial clamp — allow any valid number
+    const newVal = current + internalDelta
     const updated = axis === 'x' ? { ...asset, anchorOffsetX: newVal } : { ...asset, anchorOffsetY: newVal }
     setAssets(prev => prev.map(a => a.id === asset.id ? updated : a))
     window.controlAPI.setAssetPlayback(asset.path, axis === 'x' ? { anchorOffsetX: newVal } : { anchorOffsetY: newVal })

@@ -3,6 +3,7 @@ import { spawn } from 'child_process'
 import { join, basename, extname } from 'path'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { IPC_CHANNELS, type ExtractOptions } from '../../shared/types'
+import { getExtractionOutputDir, getAssetMetadataPath } from '../services/actionPaths'
 
 const isDev = !app.isPackaged
 
@@ -26,8 +27,7 @@ function safeSend(win: BrowserWindow | null, channel: string, ...args: unknown[]
 }
 
 function generateOutputDir(): string {
-  const timestamp = Date.now()
-  const dir = join(process.cwd(), 'src/renderer/public/assets/actions/idle/generated', String(timestamp))
+  const dir = getExtractionOutputDir()
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -192,7 +192,7 @@ export function setupExtractFrames(): void {
           metadata.trimBox = { x: trimBoxX, y: trimBoxY, w: trimBoxW, h: trimBoxH }
         }
         try {
-          writeFileSync(join(outputDir, 'asset-metadata.json'), JSON.stringify(metadata, null, 2), 'utf-8')
+          writeFileSync(getAssetMetadataPath(outputDir), JSON.stringify(metadata, null, 2), 'utf-8')
           console.log(`[extract] metadata saved: dir=${outputDir}`)
         } catch (e) {
           console.warn('[extract] metadata save failed:', e)

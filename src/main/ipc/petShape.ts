@@ -9,6 +9,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { PNG } from 'pngjs'
 import { IPC_CHANNELS } from '../../shared/types'
+import { toAbsoluteFramesDir } from '../services/actionPaths'
 
 const ALPHA_THRESHOLD = 48
 const MERGE_TOLERANCE = 1
@@ -133,7 +134,7 @@ function computeFrameShapeDisplay(filePath: string, displayW: number, displayH: 
 }
 
 function resolveFrameDir(framesDir: string): string {
-  return join(process.cwd(), 'src/renderer/public', framesDir.replace(/^\.\//, ''))
+  return toAbsoluteFramesDir(framesDir)
 }
 
 // ─── Shape Cache ─────────────────────────────────────────

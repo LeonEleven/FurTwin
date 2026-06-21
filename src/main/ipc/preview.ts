@@ -1,12 +1,13 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { readdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs'
-import { join, resolve, relative } from 'path'
+import { join } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
 import { getControlPanel } from '../windows/controlPanel'
 import { pauseAutoBehavior } from '../behavior'
+import { getLocalConfigPath, getPublicDir, getFramesRealDir, toRendererPath } from '../services/actionPaths'
 
-const LOCAL_CONFIG_PATH = resolve('src/renderer/public/assets/actions/idle/local.config.json')
-const PUBLIC_DIR = resolve('src/renderer/public')
+const LOCAL_CONFIG_PATH = getLocalConfigPath()
+const PUBLIC_DIR = getPublicDir()
 
 function getPngDimensions(filePath: string): { width: number; height: number } | null {
   try {
@@ -28,10 +29,6 @@ function scanFrames(dir: string): { count: number; width: number; height: number
     }
   }
   return null
-}
-
-function toRendererPath(absoluteDir: string): string {
-  return './' + relative(PUBLIC_DIR, absoluteDir).replace(/\\/g, '/')
 }
 
 function notifyPetWindows() {
@@ -121,7 +118,7 @@ export function setupPreview(): void {
   ipcMain.on(IPC_CHANNELS.APPLY_TO_PREVIEW, (_event, payload: { outputDir?: string; displayScale?: number }) => {
     console.log('[preview] APPLY_TO_PREVIEW received')
 
-    const outputDir = payload?.outputDir || resolve('src/renderer/public/assets/actions/idle/frames_real')
+    const outputDir = payload?.outputDir || getFramesRealDir()
     const displayScale = Number(payload?.displayScale) || 0.5
     console.log(`[preview] scanning dir: ${outputDir}`)
 

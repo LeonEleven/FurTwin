@@ -12,10 +12,11 @@
 
 import { BrowserWindow, ipcMain } from 'electron'
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs'
-import { join, resolve } from 'path'
+import { join } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../shared/types'
 import { loadAssetInfo, getActiveAssetId, toFramesDir, computeDisplayAnchor, type AssetInfo } from './utils/assetInfo'
 import { getControlPanel } from './windows/controlPanel'
+import { getGeneratedDir, getLocalConfigPath, getPublicDir } from './services/actionPaths'
 
 // ─── Constants ──────────────────────────────────────────
 const STARTUP_DELAY = 3_000       // Wait for renderer to initialize before first action
@@ -27,9 +28,9 @@ const DEFAULT_MAX_INTERVAL_SEC = 120
 const DEFAULT_MANUAL_PAUSE_SEC = 120
 const MIN_IDLE_DWELL_SEC = 8  // Minimum time to stay on idle before next auto-insert
 
-const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
-const LOCAL_CONFIG_PATH = resolve('src/renderer/public/assets/actions/idle/local.config.json')
-const PUBLIC_DIR = resolve('src/renderer/public')
+const GENERATED_DIR = getGeneratedDir()
+const LOCAL_CONFIG_PATH = getLocalConfigPath()
+const PUBLIC_DIR = getPublicDir()
 
 // ─── State ──────────────────────────────────────────────
 let autoBehaviorEnabled = true
@@ -38,6 +39,7 @@ let autoTimer: ReturnType<typeof setTimeout> | null = null
 let isAutoPlaying = false  // Currently playing a random auto-inserted action
 let autoPlayRepeatRemaining = 0  // Remaining repeat count for current auto-insert
 let currentAutoInsertConfig: AnimConfig | null = null  // Config for replaying
+let currentPlayingActionName: string | null = null  // Track current playing action name (persists through idle)
 
 // ─── Configurable Parameters ────────────────────────────
 
@@ -267,6 +269,8 @@ function switchAnimRuntime(config: AnimConfig): void {
   const bounds = pet?.getBounds()
   console.log(`[behavior] SWITCH_ANIM_RUNTIME → ${config.name} framesDir=${config.framesDir} display=${config.frameWidth}x${config.frameHeight} scale=${config.displayScale} petBounds=${JSON.stringify(bounds)} petVisible=${pet?.isVisible()}`)
   sendToPet(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, config)
+  // Track current playing action for click interaction dedup
+  currentPlayingActionName = config.name
 }
 
 function notifyControlPanel(): void {
@@ -468,7 +472,7 @@ let lastClickInteractionTime = 0
 /**
  * Select a random click-interaction candidate from assets with triggerOnClick=true.
  * Does NOT exclude idle fallback — if user explicitly enabled triggerOnClick, it's valid.
- * Prefers candidates that are not the currently-playing runtime action.
+ * Excludes the currently-playing action when multiple candidates are available.
  */
 function selectClickCandidate(): { config: AnimConfig; repeatCount: number } | null {
   const assets = scanValidAssets()
@@ -481,13 +485,17 @@ function selectClickCandidate(): { config: AnimConfig; repeatCount: number } | n
     return null
   }
 
-  // Prefer non-current-playing candidates
-  const currentName = currentAutoInsertConfig?.name
-  let pool = currentName ? candidates.filter(a => a.info.name !== currentName) : candidates
-  if (pool.length === 0) pool = candidates // fallback: allow current action (will replay from frame 0)
+  // Exclude currently-playing action when there are multiple candidates
+  const currentName = currentPlayingActionName
+  let pool = candidates
+  if (candidates.length > 1 && currentName) {
+    const filtered = candidates.filter(a => a.info.name !== currentName)
+    if (filtered.length > 0) pool = filtered
+    // Only fallback to full list if ALL candidates are the current action (shouldn't happen)
+  }
 
   const pick = pool[Math.floor(Math.random() * pool.length)]
-  console.log(`[behavior] click candidate: "${pick.info.name}" repeat=${pick.info.autoPlayRepeatCount}`)
+  console.log(`[behavior] click candidate: "${pick.info.name}" repeat=${pick.info.autoPlayRepeatCount} (excluded: ${currentName ?? 'none'})`)
 
   const anchor = computeDisplayAnchor(pick.info)
   return {

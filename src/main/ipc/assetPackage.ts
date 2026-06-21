@@ -7,12 +7,13 @@
 
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
-import { join, resolve, basename } from 'path'
+import { join, basename } from 'path'
 import JSZip from 'jszip'
 import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo } from '../utils/assetInfo'
+import { getGeneratedDir, getAssetMetadataPath } from '../services/actionPaths'
 
-const GENERATED_DIR = resolve('src/renderer/public/assets/actions/idle/generated')
+const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
 
 export function setupAssetPackage(): void {
