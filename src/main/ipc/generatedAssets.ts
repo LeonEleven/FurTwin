@@ -5,7 +5,7 @@ import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, computeDisplayAnchor, toFramesDir, validateAssetInfo, type AssetInfo } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { getGeneratedDir, getLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
-import { scanAllActions, type ActionEntry } from '../services/actionRepository'
+import { scanAllActions, validateActionPath, validateActionName, type ActionEntry } from '../services/actionRepository'
 
 const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
@@ -41,24 +41,34 @@ export function setupGeneratedAssets(): void {
 
   ipcMain.on(IPC_CHANNELS.RENAME_ASSET, (_event, payload: { path: string; name: string }) => {
     if (!payload?.path || !payload?.name) return
+
+    // Validate action name
+    const nameValidation = validateActionName(payload.name)
+    if (!nameValidation.valid) {
+      console.warn(`[generated] rename rejected: ${nameValidation.error}`)
+      return
+    }
+
     const metaPath = join(payload.path, METADATA_FILE)
     try {
       const existing = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf-8')) : {}
-      existing.name = payload.name
+      existing.name = payload.name.trim()
       writeFileSync(metaPath, JSON.stringify(existing, null, 2), 'utf-8')
       console.log(`[generated] renamed asset at ${payload.path}`)
     } catch {}
   })
 
   ipcMain.handle(IPC_CHANNELS.DELETE_ASSET, (_event, payload: { path: string }) => {
-    if (!payload?.path || !existsSync(payload.path)) return { ok: false, error: 'path not found' }
+    if (!payload?.path) return { ok: false, error: '路径不能为空' }
 
-    const resolved = join(payload.path)
-    if (!resolved.startsWith(GENERATED_DIR)) {
-      console.warn('[generated] delete rejected: path outside generated dir')
-      return { ok: false, error: 'invalid path' }
+    // Validate path using actionRepository
+    const pathValidation = validateActionPath(payload.path)
+    if (!pathValidation.valid) {
+      console.warn(`[generated] delete rejected: ${pathValidation.error}`)
+      return { ok: false, error: pathValidation.error }
     }
 
+    const resolved = join(payload.path)
     const deletedDirName = resolved.split(/[/\\]/).pop() || ''
     const wasActive = getActiveAssetId() === deletedDirName
     const localConfigPath = getLocalConfigPath()
