@@ -5,7 +5,7 @@ import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, computeDisplayAnchor, toFramesDir, validateAssetInfo, type AssetInfo } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { getGeneratedDir, getLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
-import { scanAllActions, validateActionPath, validateActionName, type ActionEntry } from '../services/actionRepository'
+import { scanAllActions, validateActionPath, validateActionName, renameAction, type ActionEntry } from '../services/actionRepository'
 
 const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
@@ -42,20 +42,11 @@ export function setupGeneratedAssets(): void {
   ipcMain.on(IPC_CHANNELS.RENAME_ASSET, (_event, payload: { path: string; name: string }) => {
     if (!payload?.path || !payload?.name) return
 
-    // Validate action name
-    const nameValidation = validateActionName(payload.name)
-    if (!nameValidation.valid) {
-      console.warn(`[generated] rename rejected: ${nameValidation.error}`)
-      return
+    // Delegate to actionRepository
+    const result = renameAction(payload.path, payload.name)
+    if (!result.ok) {
+      console.warn(`[generated] rename rejected: ${result.error}`)
     }
-
-    const metaPath = join(payload.path, METADATA_FILE)
-    try {
-      const existing = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf-8')) : {}
-      existing.name = payload.name.trim()
-      writeFileSync(metaPath, JSON.stringify(existing, null, 2), 'utf-8')
-      console.log(`[generated] renamed asset at ${payload.path}`)
-    } catch {}
   })
 
   ipcMain.handle(IPC_CHANNELS.DELETE_ASSET, (_event, payload: { path: string }) => {

@@ -1,18 +1,19 @@
 /**
- * ActionRepository - Action scanning, metadata access, and validation.
+ * ActionRepository - Action scanning, metadata access, validation, and write operations.
  *
  * This module provides a centralized interface for scanning
- * generated actions, reading their metadata, and validating
- * paths/names for write operations.
+ * generated actions, reading their metadata, validating
+ * paths/names, and performing write operations.
  *
  * P1A Phase: Scanning and metadata reading.
  * P1C-1 Phase: Path and name validation for write operations.
+ * P1C-2 Phase: Rename action (update metadata name).
  */
 
-import { existsSync, readdirSync, statSync } from 'fs'
+import { existsSync, readdirSync, statSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve, relative, isAbsolute } from 'path'
 import { loadAssetInfo, getActiveAssetId, toFramesDir, type AssetInfo } from '../utils/assetInfo'
-import { getGeneratedDir, getPublicDir } from './actionPaths'
+import { getGeneratedDir, getPublicDir, getAssetMetadataPath } from './actionPaths'
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -215,4 +216,47 @@ export function validateActionPath(dirPath: string): { valid: boolean; error?: s
   }
 
   return { valid: true }
+}
+
+// ─── Write Operations (P1C-2) ───────────────────────────
+
+/**
+ * Rename an action by updating the name field in asset-metadata.json.
+ * Does NOT move the directory, does NOT update local.config.json.
+ *
+ * @param dirPath - Absolute path to the action directory
+ * @param newName - New display name for the action
+ * @returns Success status and optional error message
+ */
+export function renameAction(dirPath: string, newName: string): { ok: boolean; error?: string } {
+  // Validate path
+  const pathValidation = validateActionPath(dirPath)
+  if (!pathValidation.valid) {
+    return { ok: false, error: pathValidation.error }
+  }
+
+  // Validate name
+  const nameValidation = validateActionName(newName)
+  if (!nameValidation.valid) {
+    return { ok: false, error: nameValidation.error }
+  }
+
+  const metaPath = getAssetMetadataPath(dirPath)
+
+  try {
+    // Read existing metadata
+    const existing = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf-8')) : {}
+
+    // Update name
+    existing.name = newName.trim()
+
+    // Write back
+    writeFileSync(metaPath, JSON.stringify(existing, null, 2), 'utf-8')
+
+    console.log(`[actionRepository] renamed asset at ${dirPath} to "${newName.trim()}"`)
+    return { ok: true }
+  } catch (e) {
+    console.warn('[actionRepository] rename failed:', e)
+    return { ok: false, error: String(e) }
+  }
 }
