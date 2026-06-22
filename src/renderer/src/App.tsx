@@ -161,6 +161,10 @@ export function App() {
   }, [extractResult])
 
   const handleApplyAsset = useCallback((asset: GeneratedAsset) => {
+    // Save current UI displayScale to metadata before switching
+    // This ensures the latest value from the input box is persisted,
+    // not a stale value from a previous metadata read
+    window.controlAPI.saveAssetDisplayScale(asset.path, asset.displayScale)
     window.controlAPI.switchToAsset(asset.path)
     // Delay refresh to let local.config.json be written
     setTimeout(() => refreshAssets(), 300)
