@@ -13,7 +13,7 @@
 import { existsSync, readdirSync, statSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join, resolve, relative, isAbsolute } from 'path'
 import { loadAssetInfo, getActiveAssetId, toFramesDir, computeDisplayAnchor, type AssetInfo } from '../utils/assetInfo'
-import { getGeneratedDir, getPublicDir, getAssetMetadataPath } from './actionPaths'
+import { getGeneratedDir, getPublicDir, getAssetMetadataPath, getUserGeneratedDir } from './actionPaths'
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -60,6 +60,46 @@ export function scanAllActions(): ActionEntry[] {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
     const dirPath = join(GENERATED_DIR, entry.name)
+    try {
+      const info = loadAssetInfo(dirPath, entry.name)
+      if (info) {
+        const stat = statSync(dirPath)
+        const isActive = activeId !== null && activeId === entry.name
+        assets.push({
+          id: entry.name,
+          path: dirPath,
+          info,
+          modifiedAt: stat.mtimeMs,
+          isActive,
+        })
+      }
+    } catch {}
+  }
+
+  assets.sort((a, b) => b.modifiedAt - a.modifiedAt)
+  return assets
+}
+
+/**
+ * Scan user actions from userData directory (P2C - read-only, not connected to business logic).
+ * Returns entries sorted by modifiedAt descending (newest first).
+ *
+ * This function is NOT yet connected to any business logic.
+ * It will be used in future phases to support user-writable action storage.
+ *
+ * @returns ActionEntry[] from userData/actions/generated, or empty array if directory doesn't exist
+ */
+export function scanUserActions(): ActionEntry[] {
+  const USER_GENERATED_DIR = getUserGeneratedDir()
+  if (!existsSync(USER_GENERATED_DIR)) return []
+
+  const activeId = getActiveAssetId()
+  const entries = readdirSync(USER_GENERATED_DIR, { withFileTypes: true })
+  const assets: ActionEntry[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const dirPath = join(USER_GENERATED_DIR, entry.name)
     try {
       const info = loadAssetInfo(dirPath, entry.name)
       if (info) {
