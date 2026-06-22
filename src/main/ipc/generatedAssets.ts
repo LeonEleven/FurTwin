@@ -1,11 +1,11 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, computeDisplayAnchor, toFramesDir, validateAssetInfo, type AssetInfo } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { getGeneratedDir, getLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
-import { scanAllActions, validateActionPath, validateActionName, renameAction, type ActionEntry } from '../services/actionRepository'
+import { scanAllActions, validateActionPath, validateActionName, renameAction, deleteActionDir, type ActionEntry } from '../services/actionRepository'
 
 const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
@@ -52,75 +52,67 @@ export function setupGeneratedAssets(): void {
   ipcMain.handle(IPC_CHANNELS.DELETE_ASSET, (_event, payload: { path: string }) => {
     if (!payload?.path) return { ok: false, error: '路径不能为空' }
 
-    // Validate path using actionRepository
-    const pathValidation = validateActionPath(payload.path)
-    if (!pathValidation.valid) {
-      console.warn(`[generated] delete rejected: ${pathValidation.error}`)
-      return { ok: false, error: pathValidation.error }
-    }
-
+    // Check if this is the active asset before deleting
     const resolved = join(payload.path)
     const deletedDirName = resolved.split(/[/\\]/).pop() || ''
     const wasActive = getActiveAssetId() === deletedDirName
     const localConfigPath = getLocalConfigPath()
 
-    try {
-      rmSync(resolved, { recursive: true, force: true })
-      console.log(`[generated] deleted: ${resolved}`)
-
-      if (!wasActive) {
-        // Not the active asset — nothing more to do
-        return { ok: true }
-      }
-
-      // Deleted the active asset — find fallback
-      const remaining = scanGeneratedDir() // already sorted by modifiedAt desc
-      const LOCAL_CONFIG_PATH = localConfigPath
-
-      // Fallback priority: default → idle → any valid → demo
-      let fallback = remaining.find(a => a.isDefault)
-      if (!fallback) fallback = remaining.find(a => a.actionType === 'idle')
-      if (!fallback) fallback = remaining[0] // most recent
-
-      if (fallback) {
-        // Switch to fallback asset
-        const anchor = computeDisplayAnchor(fallback)
-        const config = {
-          name: fallback.name, label: fallback.name, framesDir: toFramesDir(fallback.path),
-          fps: fallback.fpsOverride ?? 12, scale: 0.5, displayScale: fallback.displayScale,
-          loop: fallback.loop, frameCount: fallback.frameCount, frameWidth: fallback.frameWidth,
-          frameHeight: fallback.frameHeight, framePattern: `{}.${fallback.format}`,
-          anchorX: anchor?.anchorX, anchorY: anchor?.anchorY,
-        }
-        writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
-        console.log(`[generated] deleted active, switched to fallback: "${fallback.name}" (id=${fallback.id})`)
-      } else {
-        // No remaining assets — delete local.config.json to fall back to demo
-        if (existsSync(LOCAL_CONFIG_PATH)) {
-          const { unlinkSync } = require('fs')
-          unlinkSync(LOCAL_CONFIG_PATH)
-        }
-        console.log('[generated] deleted active, no remaining assets, restored demo')
-      }
-
-      // Notify pet to reload
-      BrowserWindow.getAllWindows().forEach(win => {
-        if (!win.isDestroyed()) {
-          try { win.webContents.send(IPC_CHANNELS.RELOAD_ANIM) } catch {}
-        }
-      })
-
-      // Notify control panel to refresh
-      const cp = getControlPanel()
-      if (cp && !cp.isDestroyed()) {
-        try { cp.webContents.send(IPC_CHANNELS.ACTIVE_ASSET_CHANGED) } catch {}
-      }
-
-      return { ok: true }
-    } catch (e) {
-      console.warn('[generated] delete failed:', e)
-      return { ok: false, error: String(e) }
+    // Delegate directory deletion to actionRepository
+    const deleteResult = deleteActionDir(payload.path)
+    if (!deleteResult.ok) {
+      console.warn(`[generated] delete rejected: ${deleteResult.error}`)
+      return deleteResult
     }
+
+    // If not the active asset, we're done
+    if (!wasActive) {
+      return { ok: true }
+    }
+
+    // Deleted the active asset — find fallback
+    const remaining = scanGeneratedDir() // already sorted by modifiedAt desc
+    const LOCAL_CONFIG_PATH = localConfigPath
+
+    // Fallback priority: default → idle → any valid → demo
+    let fallback = remaining.find(a => a.isDefault)
+    if (!fallback) fallback = remaining.find(a => a.actionType === 'idle')
+    if (!fallback) fallback = remaining[0] // most recent
+
+    if (fallback) {
+      // Switch to fallback asset
+      const anchor = computeDisplayAnchor(fallback)
+      const config = {
+        name: fallback.name, label: fallback.name, framesDir: toFramesDir(fallback.path),
+        fps: fallback.fpsOverride ?? 12, scale: 0.5, displayScale: fallback.displayScale,
+        loop: fallback.loop, frameCount: fallback.frameCount, frameWidth: fallback.frameWidth,
+        frameHeight: fallback.frameHeight, framePattern: `{}.${fallback.format}`,
+        anchorX: anchor?.anchorX, anchorY: anchor?.anchorY,
+      }
+      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+      console.log(`[generated] deleted active, switched to fallback: "${fallback.name}" (id=${fallback.id})`)
+    } else {
+      // No remaining assets — delete local.config.json to fall back to demo
+      if (existsSync(LOCAL_CONFIG_PATH)) {
+        unlinkSync(LOCAL_CONFIG_PATH)
+      }
+      console.log('[generated] deleted active, no remaining assets, restored demo')
+    }
+
+    // Notify pet to reload
+    BrowserWindow.getAllWindows().forEach(win => {
+      if (!win.isDestroyed()) {
+        try { win.webContents.send(IPC_CHANNELS.RELOAD_ANIM) } catch {}
+      }
+    })
+
+    // Notify control panel to refresh
+    const cp = getControlPanel()
+    if (cp && !cp.isDestroyed()) {
+      try { cp.webContents.send(IPC_CHANNELS.ACTIVE_ASSET_CHANGED) } catch {}
+    }
+
+    return { ok: true }
   })
 
   // 更新动作播放属性

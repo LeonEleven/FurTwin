@@ -10,7 +10,7 @@
  * P1C-2 Phase: Rename action (update metadata name).
  */
 
-import { existsSync, readdirSync, statSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readdirSync, statSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join, resolve, relative, isAbsolute } from 'path'
 import { loadAssetInfo, getActiveAssetId, toFramesDir, type AssetInfo } from '../utils/assetInfo'
 import { getGeneratedDir, getPublicDir, getAssetMetadataPath } from './actionPaths'
@@ -257,6 +257,33 @@ export function renameAction(dirPath: string, newName: string): { ok: boolean; e
     return { ok: true }
   } catch (e) {
     console.warn('[actionRepository] rename failed:', e)
+    return { ok: false, error: String(e) }
+  }
+}
+
+// ─── Delete Operations (P1C-3A) ─────────────────────────
+
+/**
+ * Delete an action directory.
+ * Validates the path first, then removes the directory recursively.
+ * Does NOT handle fallback, local.config.json, or notifications.
+ *
+ * @param dirPath - Absolute path to the action directory
+ * @returns Success status and optional error message
+ */
+export function deleteActionDir(dirPath: string): { ok: boolean; error?: string } {
+  // Validate path
+  const pathValidation = validateActionPath(dirPath)
+  if (!pathValidation.valid) {
+    return { ok: false, error: pathValidation.error }
+  }
+
+  try {
+    rmSync(dirPath, { recursive: true, force: true })
+    console.log(`[actionRepository] deleted: ${dirPath}`)
+    return { ok: true }
+  } catch (e) {
+    console.warn('[actionRepository] delete failed:', e)
     return { ok: false, error: String(e) }
   }
 }
