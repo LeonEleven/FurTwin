@@ -287,3 +287,54 @@ export function deleteActionDir(dirPath: string): { ok: boolean; error?: string 
     return { ok: false, error: String(e) }
   }
 }
+
+// ─── Fallback Operations (P1C-3B-1) ─────────────────────
+
+/**
+ * Get a fallback action candidate after deleting the current action.
+ * Returns the best candidate based on priority:
+ * 1. isDefault && actionType === 'idle'
+ * 2. any isDefault
+ * 3. newest actionType === 'idle'
+ * 4. any valid (most recent)
+ * 5. null (caller should use Demo)
+ *
+ * @param excludeDirName - Directory name to exclude (the deleted action)
+ * @returns The best fallback candidate, or null if none available
+ */
+export function getFallbackActionCandidate(excludeDirName?: string): ActionEntry | null {
+  const assets = scanAllActions()
+  if (assets.length === 0) return null
+
+  // Exclude the deleted action
+  const candidates = excludeDirName
+    ? assets.filter(a => a.id !== excludeDirName)
+    : assets
+
+  if (candidates.length === 0) return null
+
+  // 1. isDefault && actionType === 'idle'
+  const defaultIdle = candidates.find(a => a.info.isDefault && a.info.actionType === 'idle')
+  if (defaultIdle) {
+    console.log(`[actionRepository] fallback candidate: default idle "${defaultIdle.info.name}"`)
+    return defaultIdle
+  }
+
+  // 2. any isDefault
+  const anyDefault = candidates.find(a => a.info.isDefault)
+  if (anyDefault) {
+    console.log(`[actionRepository] fallback candidate: default "${anyDefault.info.name}"`)
+    return anyDefault
+  }
+
+  // 3. newest actionType === 'idle' (assets are sorted by modifiedAt desc)
+  const newestIdle = candidates.find(a => a.info.actionType === 'idle')
+  if (newestIdle) {
+    console.log(`[actionRepository] fallback candidate: newest idle "${newestIdle.info.name}"`)
+    return newestIdle
+  }
+
+  // 4. any valid (most recent)
+  console.log(`[actionRepository] fallback candidate: most recent "${candidates[0].info.name}"`)
+  return candidates[0]
+}

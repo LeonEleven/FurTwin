@@ -5,7 +5,7 @@ import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, computeDisplayAnchor, toFramesDir, validateAssetInfo, type AssetInfo } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { getGeneratedDir, getLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
-import { scanAllActions, validateActionPath, validateActionName, renameAction, deleteActionDir, type ActionEntry } from '../services/actionRepository'
+import { scanAllActions, validateActionPath, validateActionName, renameAction, deleteActionDir, getFallbackActionCandidate, type ActionEntry } from '../services/actionRepository'
 
 const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
@@ -71,26 +71,23 @@ export function setupGeneratedAssets(): void {
     }
 
     // Deleted the active asset — find fallback
-    const remaining = scanGeneratedDir() // already sorted by modifiedAt desc
     const LOCAL_CONFIG_PATH = localConfigPath
 
-    // Fallback priority: default → idle → any valid → demo
-    let fallback = remaining.find(a => a.isDefault)
-    if (!fallback) fallback = remaining.find(a => a.actionType === 'idle')
-    if (!fallback) fallback = remaining[0] // most recent
+    // Delegate fallback candidate selection to actionRepository
+    const fallback = getFallbackActionCandidate(deletedDirName)
 
     if (fallback) {
       // Switch to fallback asset
-      const anchor = computeDisplayAnchor(fallback)
+      const anchor = computeDisplayAnchor(fallback.info)
       const config = {
-        name: fallback.name, label: fallback.name, framesDir: toFramesDir(fallback.path),
-        fps: fallback.fpsOverride ?? 12, scale: 0.5, displayScale: fallback.displayScale,
-        loop: fallback.loop, frameCount: fallback.frameCount, frameWidth: fallback.frameWidth,
-        frameHeight: fallback.frameHeight, framePattern: `{}.${fallback.format}`,
+        name: fallback.info.name, label: fallback.info.name, framesDir: toFramesDir(fallback.path),
+        fps: fallback.info.fpsOverride ?? 12, scale: 0.5, displayScale: fallback.info.displayScale,
+        loop: fallback.info.loop, frameCount: fallback.info.frameCount, frameWidth: fallback.info.frameWidth,
+        frameHeight: fallback.info.frameHeight, framePattern: `{}.${fallback.info.format}`,
         anchorX: anchor?.anchorX, anchorY: anchor?.anchorY,
       }
       writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
-      console.log(`[generated] deleted active, switched to fallback: "${fallback.name}" (id=${fallback.id})`)
+      console.log(`[generated] deleted active, switched to fallback: "${fallback.info.name}" (id=${fallback.id})`)
     } else {
       // No remaining assets — delete local.config.json to fall back to demo
       if (existsSync(LOCAL_CONFIG_PATH)) {
