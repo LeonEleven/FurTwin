@@ -4,11 +4,14 @@
  * This module provides a single source of truth for all action-related paths.
  * In this phase, all paths point to the current physical locations under src/renderer/public/.
  * Future phases may redirect user-writable paths to app.getPath('userData').
+ *
+ * P2B Phase: Added userData path functions for future use (not yet connected to business logic).
  */
 
 import { resolve, join } from 'path'
+import { app } from 'electron'
 
-// Base directories
+// ─── Current directories (development + packaged compatible) ─────────────────
 const PUBLIC_DIR = resolve('src/renderer/public')
 const ACTIONS_DIR = join(PUBLIC_DIR, 'assets/actions/idle')
 
@@ -19,6 +22,10 @@ export const LOCAL_CONFIG_PATH = join(ACTIONS_DIR, 'local.config.json')
 // Read-only paths
 export const FRAMES_DIR = join(ACTIONS_DIR, 'frames')
 export const FRAMES_REAL_DIR = join(ACTIONS_DIR, 'frames_real')
+
+// ─── userData paths (P2B - reserved for future use) ─────────────────────────
+// These functions are NOT yet connected to any business logic.
+// They will be used in future phases to support user-writable action storage.
 
 /**
  * Get the public directory root.
@@ -88,4 +95,72 @@ export function toAbsoluteFramesDir(rendererPath: string): string {
 export function getExtractionOutputDir(): string {
   const timestamp = Date.now()
   return join(GENERATED_DIR, String(timestamp))
+}
+
+// ─── userData path functions (P2B - reserved for future use) ─────────────────
+// These functions are NOT yet connected to any business logic.
+// They will be used in future phases to support user-writable action storage.
+
+/**
+ * Check if the app is running in packaged mode.
+ * Useful for determining which path strategy to use.
+ */
+export function isPackagedRuntime(): boolean {
+  return app.isPackaged
+}
+
+/**
+ * Get the userData root directory.
+ * This is the Electron app's userData path (e.g., %APPDATA%/FurTwin on Windows).
+ * Currently not used by any business logic.
+ */
+export function getUserDataRootDir(): string {
+  return app.getPath('userData')
+}
+
+/**
+ * Get the user actions directory under userData.
+ * Structure: <userData>/actions
+ * Currently not used by any business logic.
+ */
+export function getUserActionsDir(): string {
+  return join(getUserDataRootDir(), 'actions')
+}
+
+/**
+ * Get the user generated actions directory under userData.
+ * Structure: <userData>/actions/generated
+ * Currently not used by any business logic.
+ */
+export function getUserGeneratedDir(): string {
+  return join(getUserActionsDir(), 'generated')
+}
+
+/**
+ * Get the user temp directory under userData.
+ * Structure: <userData>/temp
+ * Useful for temporary extraction or processing.
+ * Currently not used by any business logic.
+ */
+export function getUserTempDir(): string {
+  return join(getUserDataRootDir(), 'temp')
+}
+
+/**
+ * Get the bundled actions directory (current behavior).
+ * This is the directory where actions are currently stored.
+ * In development: src/renderer/public/assets/actions/idle/generated
+ * In packaged: app.asar/assets/actions/idle/generated
+ * Currently used by all business logic.
+ */
+export function getBundledActionsDir(): string {
+  return GENERATED_DIR
+}
+
+/**
+ * Get the bundled local.config.json path.
+ * Currently used by all business logic.
+ */
+export function getBundledLocalConfigPath(): string {
+  return LOCAL_CONFIG_PATH
 }
