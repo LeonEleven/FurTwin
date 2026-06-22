@@ -5,7 +5,7 @@ import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, computeDisplayAnchor, toFramesDir, validateAssetInfo, type AssetInfo } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { getGeneratedDir, getLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
-import { scanAllActions, validateActionPath, validateActionName, renameAction, deleteActionDir, getFallbackActionCandidate, type ActionEntry } from '../services/actionRepository'
+import { scanAllActions, validateActionPath, validateActionName, renameAction, deleteActionDir, getFallbackActionCandidate, buildFallbackRuntimeConfig, type ActionEntry } from '../services/actionRepository'
 
 const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
@@ -77,17 +77,14 @@ export function setupGeneratedAssets(): void {
     const fallback = getFallbackActionCandidate(deletedDirName)
 
     if (fallback) {
-      // Switch to fallback asset
-      const anchor = computeDisplayAnchor(fallback.info)
-      const config = {
-        name: fallback.info.name, label: fallback.info.name, framesDir: toFramesDir(fallback.path),
-        fps: fallback.info.fpsOverride ?? 12, scale: 0.5, displayScale: fallback.info.displayScale,
-        loop: fallback.info.loop, frameCount: fallback.info.frameCount, frameWidth: fallback.info.frameWidth,
-        frameHeight: fallback.info.frameHeight, framePattern: `{}.${fallback.info.format}`,
-        anchorX: anchor?.anchorX, anchorY: anchor?.anchorY,
+      // Build runtime config using actionRepository
+      const config = buildFallbackRuntimeConfig(fallback)
+      if (!config) {
+        console.warn(`[generated] failed to build runtime config for fallback: ${fallback.info.name}`)
+        return { ok: false, error: 'Failed to build runtime config' }
       }
       writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
-      console.log(`[generated] deleted active, switched to fallback: "${fallback.info.name}" (id=${fallback.id})`)
+      console.log(`[generated] deleted active, switched to fallback: "${config.name}" (id=${fallback.id})`)
     } else {
       // No remaining assets — delete local.config.json to fall back to demo
       if (existsSync(LOCAL_CONFIG_PATH)) {

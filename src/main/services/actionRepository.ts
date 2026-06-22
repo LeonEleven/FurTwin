@@ -12,7 +12,7 @@
 
 import { existsSync, readdirSync, statSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join, resolve, relative, isAbsolute } from 'path'
-import { loadAssetInfo, getActiveAssetId, toFramesDir, type AssetInfo } from '../utils/assetInfo'
+import { loadAssetInfo, getActiveAssetId, toFramesDir, computeDisplayAnchor, type AssetInfo } from '../utils/assetInfo'
 import { getGeneratedDir, getPublicDir, getAssetMetadataPath } from './actionPaths'
 
 // ─── Types ──────────────────────────────────────────────
@@ -23,6 +23,22 @@ export interface ActionEntry {
   info: AssetInfo      // Full asset metadata
   modifiedAt: number   // Directory modification time (ms)
   isActive: boolean    // Whether this is the currently active asset
+}
+
+export interface RuntimeAssetConfig {
+  name: string
+  label: string
+  framesDir: string
+  fps: number
+  scale: number
+  displayScale: number
+  loop: boolean
+  frameCount: number
+  frameWidth: number
+  frameHeight: number
+  framePattern: string
+  anchorX?: number
+  anchorY?: number
 }
 
 // ─── Read-Only Repository ───────────────────────────────
@@ -337,4 +353,64 @@ export function getFallbackActionCandidate(excludeDirName?: string): ActionEntry
   // 4. any valid (most recent)
   console.log(`[actionRepository] fallback candidate: most recent "${candidates[0].info.name}"`)
   return candidates[0]
+}
+
+// ─── Runtime Config Builder (P1C-3B-2A) ─────────────────
+
+/**
+ * Build a runtime config from an ActionEntry.
+ * This is a pure function that constructs the config object
+ * used by local.config.json and pet window.
+ *
+ * @param fallback - The ActionEntry to build config from
+ * @returns RuntimeAssetConfig or null if the entry is invalid
+ */
+export function buildFallbackRuntimeConfig(fallback: ActionEntry): RuntimeAssetConfig | null {
+  if (!fallback || !fallback.info) {
+    console.warn('[actionRepository] buildFallbackRuntimeConfig: invalid fallback entry')
+    return null
+  }
+
+  const info = fallback.info
+
+  // Validate essential fields
+  if (!Number.isFinite(info.frameCount) || info.frameCount <= 0) {
+    console.warn(`[actionRepository] buildFallbackRuntimeConfig: invalid frameCount=${info.frameCount}`)
+    return null
+  }
+  if (!Number.isFinite(info.frameWidth) || info.frameWidth <= 0) {
+    console.warn(`[actionRepository] buildFallbackRuntimeConfig: invalid frameWidth=${info.frameWidth}`)
+    return null
+  }
+  if (!Number.isFinite(info.frameHeight) || info.frameHeight <= 0) {
+    console.warn(`[actionRepository] buildFallbackRuntimeConfig: invalid frameHeight=${info.frameHeight}`)
+    return null
+  }
+  if (!Number.isFinite(info.displayScale) || info.displayScale <= 0) {
+    console.warn(`[actionRepository] buildFallbackRuntimeConfig: invalid displayScale=${info.displayScale}`)
+    return null
+  }
+
+  // Compute anchor
+  const anchor = computeDisplayAnchor(info)
+
+  // Build config
+  const config: RuntimeAssetConfig = {
+    name: info.name,
+    label: info.name,
+    framesDir: toFramesDir(fallback.path),
+    fps: info.fpsOverride ?? 12,
+    scale: 0.5,
+    displayScale: info.displayScale,
+    loop: info.loop,
+    frameCount: info.frameCount,
+    frameWidth: info.frameWidth,
+    frameHeight: info.frameHeight,
+    framePattern: `{}.${info.format}`,
+    anchorX: anchor?.anchorX,
+    anchorY: anchor?.anchorY,
+  }
+
+  console.log(`[actionRepository] built runtime config: "${config.name}" framesDir=${config.framesDir} display=${config.frameWidth}x${config.frameHeight} scale=${config.displayScale}`)
+  return config
 }
