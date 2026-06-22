@@ -10,10 +10,18 @@ import { setupAssetPackage } from './ipc/assetPackage'
 import { setupActionLib } from './ipc/actionLib'
 import { setupPreview } from './ipc/preview'
 import { setupPetShape } from './ipc/petShape'
+import { registerUserDataProtocol, setupUserDataProtocolHandler } from './services/userDataProtocol'
+
+// Register userData protocol scheme before app is ready
+registerUserDataProtocol()
 
 Menu.setApplicationMenu(null)
 
 app.whenReady().then(() => {
+  // Setup userData protocol handler (P2D-1A)
+  // This provides read-only access to userData/actions/generated for future use
+  setupUserDataProtocolHandler()
+
   // 启动时验证上次动作是否仍可用（无效则自动回退到 Demo）
   validateStartupConfig()
 
