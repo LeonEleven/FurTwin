@@ -23,6 +23,7 @@ export interface ActionEntry {
   info: AssetInfo      // Full asset metadata
   modifiedAt: number   // Directory modification time (ms)
   isActive: boolean    // Whether this is the currently active asset
+  source: 'bundled' | 'user'  // Where the action is stored
 }
 
 export interface RuntimeAssetConfig {
@@ -71,6 +72,7 @@ export function scanAllActions(): ActionEntry[] {
           info,
           modifiedAt: stat.mtimeMs,
           isActive,
+          source: 'bundled',
         })
       }
     } catch {}
@@ -111,6 +113,7 @@ export function scanUserActions(): ActionEntry[] {
           info,
           modifiedAt: stat.mtimeMs,
           isActive,
+          source: 'user',
         })
       }
     } catch {}
@@ -157,6 +160,7 @@ export function scanValidActions(): ActionEntry[] {
         info,
         modifiedAt: stat.mtimeMs,
         isActive,
+        source: 'bundled',
       })
     } catch {}
   }
