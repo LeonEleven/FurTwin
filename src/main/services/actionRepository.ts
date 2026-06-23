@@ -13,7 +13,7 @@
 import { existsSync, readdirSync, statSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join, resolve, relative, isAbsolute } from 'path'
 import { loadAssetInfo, getActiveAssetId, toFramesDir, computeDisplayAnchor, type AssetInfo } from '../utils/assetInfo'
-import { getGeneratedDir, getPublicDir, getAssetMetadataPath, getUserGeneratedDir } from './actionPaths'
+import { getGeneratedDir, getPublicDir, getAssetMetadataPath, getUserGeneratedDir, toUserDataProtocolUrl } from './actionPaths'
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -40,6 +40,26 @@ export interface RuntimeAssetConfig {
   framePattern: string
   anchorX?: number
   anchorY?: number
+}
+
+// ─── Source-Aware FramesDir Helper (P2D-2D-2A) ──────────
+
+/**
+ * Generate the correct framesDir for an action based on its source.
+ * - bundled: returns renderer-relative path (./assets/actions/idle/generated/<id>)
+ * - user: returns furtwin-userdata:// protocol URL
+ *
+ * This is a pure function that does NOT read/write any files.
+ * It will be used in future phases to support user-writable action storage.
+ *
+ * NOTE: This function is NOT yet connected to any business logic.
+ */
+export function toActionFramesDir(entry: ActionEntry): string {
+  if (entry.source === 'user') {
+    return toUserDataProtocolUrl(entry.id)
+  }
+  // For bundled actions, use existing renderer-relative path
+  return toFramesDir(entry.path)
 }
 
 // ─── Read-Only Repository ───────────────────────────────
