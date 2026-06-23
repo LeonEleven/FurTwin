@@ -83,7 +83,22 @@ export function setupGeneratedAssets(): void {
         console.warn(`[generated] failed to build runtime config for fallback: ${fallback.info.name}`)
         return { ok: false, error: 'Failed to build runtime config' }
       }
-      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+      // Preserve existing behavior params when writing fallback config
+      let existingConfig: Record<string, any> = {}
+      if (existsSync(LOCAL_CONFIG_PATH)) {
+        try {
+          existingConfig = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+        } catch {}
+      }
+      const mergedConfig = {
+        ...config,
+        autoBehaviorEnabled: existingConfig.autoBehaviorEnabled,
+        autoBehaviorFirstDelaySec: existingConfig.autoBehaviorFirstDelaySec,
+        autoBehaviorMinIntervalSec: existingConfig.autoBehaviorMinIntervalSec,
+        autoBehaviorMaxIntervalSec: existingConfig.autoBehaviorMaxIntervalSec,
+        autoBehaviorManualPauseSec: existingConfig.autoBehaviorManualPauseSec,
+      }
+      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
       console.log(`[generated] deleted active, switched to fallback: "${config.name}" (id=${fallback.id})`)
     } else {
       // No remaining assets — delete local.config.json to fall back to demo

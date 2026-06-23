@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { writeFileSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
 import { loadAssetInfo, validateAssetInfo, toFramesDir, computeDisplayAnchor } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
@@ -55,7 +55,23 @@ export function setupActionLib(): void {
     console.log(`[actionLib] switch asset id=${dirName} frames=${config.frameCount} display=${config.frameWidth}x${config.frameHeight} scale=${config.displayScale} anchor=(${anchor?.anchorX?.toFixed(1) ?? '-'},${anchor?.anchorY?.toFixed(1) ?? '-'}) src=${info!.sourceWidth ?? '-'}x${info!.sourceHeight ?? '-'} trim=${JSON.stringify(info!.trimBox ?? '-')}`)
 
     try {
-      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+      // Preserve existing behavior params when writing action config
+      let existingConfig: Record<string, any> = {}
+      if (existsSync(LOCAL_CONFIG_PATH)) {
+        try {
+          existingConfig = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+        } catch {}
+      }
+      // Merge: action config fields + preserved behavior params
+      const mergedConfig = {
+        ...config,
+        autoBehaviorEnabled: existingConfig.autoBehaviorEnabled,
+        autoBehaviorFirstDelaySec: existingConfig.autoBehaviorFirstDelaySec,
+        autoBehaviorMinIntervalSec: existingConfig.autoBehaviorMinIntervalSec,
+        autoBehaviorMaxIntervalSec: existingConfig.autoBehaviorMaxIntervalSec,
+        autoBehaviorManualPauseSec: existingConfig.autoBehaviorManualPauseSec,
+      }
+      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
       console.log('[actionLib] local.config.json updated')
     } catch (e) {
       console.error('[actionLib] write local.config.json failed:', e)

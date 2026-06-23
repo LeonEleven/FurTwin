@@ -146,7 +146,23 @@ export function setupPreview(): void {
     }
 
     try {
-      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+      // Preserve existing behavior params when writing action config
+      let existingConfig: Record<string, any> = {}
+      if (existsSync(LOCAL_CONFIG_PATH)) {
+        try {
+          existingConfig = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+        } catch {}
+      }
+      // Merge: action config fields + preserved behavior params
+      const mergedConfig = {
+        ...config,
+        autoBehaviorEnabled: existingConfig.autoBehaviorEnabled,
+        autoBehaviorFirstDelaySec: existingConfig.autoBehaviorFirstDelaySec,
+        autoBehaviorMinIntervalSec: existingConfig.autoBehaviorMinIntervalSec,
+        autoBehaviorMaxIntervalSec: existingConfig.autoBehaviorMaxIntervalSec,
+        autoBehaviorManualPauseSec: existingConfig.autoBehaviorManualPauseSec,
+      }
+      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
       console.log(`[preview] write local.config scale=${config.scale} displayScale=${config.displayScale}`)
     } catch (e) {
       console.error('[preview] failed to write local.config.json:', e)
