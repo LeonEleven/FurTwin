@@ -3,9 +3,45 @@ import { spawn } from 'child_process'
 import { join, basename, extname } from 'path'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { IPC_CHANNELS, type ExtractOptions } from '../../shared/types'
-import { getExtractionOutputDir, getAssetMetadataPath } from '../services/actionPaths'
+import { getExtractionOutputDir, getAssetMetadataPath, createGeneratedActionId, getUserExtractionTempActionDir } from '../services/actionPaths'
 
 const isDev = !app.isPackaged
+
+// ─── Output Target (P2D-2B-0) ─────────────────────────────────────────────
+// Defines where FFmpeg extraction output is stored.
+// Currently only 'bundled' is used by the UI.
+// 'user-temp' is reserved for future userData support.
+
+type OutputTarget = 'bundled' | 'user-temp'
+
+interface OutputDirResult {
+  dir: string
+  actionId: string
+  target: OutputTarget
+}
+
+/**
+ * Generate output directory based on target.
+ * - 'bundled': current behavior, output to src/renderer/public/assets/actions/idle/generated/<timestamp>
+ * - 'user-temp': reserved for future, output to userData/temp/extract/<actionId>
+ *
+ * NOTE: 'user-temp' is NOT yet connected to any business logic.
+ */
+function generateOutputDir(target: OutputTarget = 'bundled'): OutputDirResult {
+  if (target === 'user-temp') {
+    // Reserved for future use - NOT connected to UI yet
+    const actionId = createGeneratedActionId()
+    const dir = getUserExtractionTempActionDir(actionId)
+    mkdirSync(dir, { recursive: true })
+    return { dir, actionId, target }
+  }
+
+  // Default: bundled behavior (current)
+  const actionId = String(Date.now())
+  const dir = getExtractionOutputDir()
+  mkdirSync(dir, { recursive: true })
+  return { dir, actionId, target }
+}
 
 function resolveNodeExecutable(): string {
   const npmNode = process.env.npm_node_execpath
@@ -24,12 +60,6 @@ function safeSend(win: BrowserWindow | null, channel: string, ...args: unknown[]
   if (win && !win.isDestroyed()) {
     try { win.webContents.send(channel, ...args) } catch {}
   }
-}
-
-function generateOutputDir(): string {
-  const dir = getExtractionOutputDir()
-  mkdirSync(dir, { recursive: true })
-  return dir
 }
 
 /** 扫描输出目录，获取帧信息 */
@@ -74,8 +104,10 @@ export function setupExtractFrames(): void {
     const sender = BrowserWindow.fromWebContents(event.sender)
     if (!sender) return
 
-    const outputDir = generateOutputDir()
-    console.log(`[extract] output_dir: ${outputDir}`)
+    // Default to 'bundled' target (current behavior)
+    const outputResult = generateOutputDir('bundled')
+    const outputDir = outputResult.dir
+    console.log(`[extract] output_dir: ${outputDir} (target: ${outputResult.target})`)
 
     const nodeExec = resolveNodeExecutable()
     const scriptPath = getScriptPath()
