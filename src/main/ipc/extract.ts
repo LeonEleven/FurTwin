@@ -1,9 +1,9 @@
 import { app, dialog, ipcMain, BrowserWindow } from 'electron'
 import { spawn } from 'child_process'
 import { join, basename, extname } from 'path'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync, renameSync } from 'fs'
 import { IPC_CHANNELS, type ExtractOptions } from '../../shared/types'
-import { getExtractionOutputDir, getAssetMetadataPath, createGeneratedActionId, getUserExtractionTempActionDir } from '../services/actionPaths'
+import { getExtractionOutputDir, getAssetMetadataPath, createGeneratedActionId, getUserExtractionTempActionDir, getUserGeneratedActionDir } from '../services/actionPaths'
 
 const isDev = !app.isPackaged
 
@@ -230,6 +230,40 @@ export function setupExtractFrames(): void {
         } catch (e) {
           console.warn('[extract] metadata save failed:', e)
         }
+
+        // If user-temp, move to final location
+        let finalOutputDir = outputDir
+        if (outputResult.target === 'user-temp') {
+          const finalDir = getUserGeneratedActionDir(outputResult.actionId)
+
+          // Check if final dir already exists
+          if (existsSync(finalDir)) {
+            console.warn(`[extract] final dir already exists: ${finalDir}`)
+            try {
+              rmSync(outputDir, { recursive: true, force: true })
+              console.log(`[extract] cleaned up user-temp dir: ${outputDir}`)
+            } catch (e) {
+              console.warn('[extract] failed to cleanup user-temp dir:', e)
+            }
+            safeSend(sender, IPC_CHANNELS.EXTRACT_ERROR, { code: -1, message: 'Target directory already exists' })
+            return
+          }
+
+          // Move temp to final
+          try {
+            renameSync(outputDir, finalDir)
+            finalOutputDir = finalDir
+            console.log(`[extract] moved user-temp to final: ${finalDir}`)
+          } catch (e) {
+            console.warn('[extract] failed to move user-temp to final:', e)
+            // Keep temp dir for debugging
+            safeSend(sender, IPC_CHANNELS.EXTRACT_ERROR, { code: -1, message: `Failed to move to final directory: ${e.message}` })
+            return
+          }
+        }
+
+        // Update result with final outputDir
+        result.outputDir = finalOutputDir
 
         console.log(`[extract] EXTRACT_DONE result=${JSON.stringify(result)}`)
         safeSend(sender, IPC_CHANNELS.EXTRACT_DONE, result)
