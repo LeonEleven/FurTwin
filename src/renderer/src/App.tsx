@@ -48,7 +48,12 @@ export function App() {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [autoBehaviorEnabled, setAutoBehaviorEnabled] = useState(true)
-  const [behaviorParams, setBehaviorParams] = useState({
+  const [behaviorParams, setBehaviorParams] = useState<{
+    firstDelaySec: number | string
+    minIntervalSec: number | string
+    maxIntervalSec: number | string
+    manualPauseSec: number | string
+  }>({
     firstDelaySec: 30, minIntervalSec: 60, maxIntervalSec: 120, manualPauseSec: 120,
   })
   const [showBehaviorParams, setShowBehaviorParams] = useState(false)
@@ -336,19 +341,46 @@ export function App() {
   }, [])
 
   const handleBehaviorParamChange = useCallback((key: string, value: string) => {
+    // Allow empty string for editing (user deleting all digits)
+    if (value === '' || value === '-') {
+      setBehaviorParams(prev => ({ ...prev, [key]: value }))
+      return
+    }
     const num = parseInt(value, 10)
     if (!Number.isFinite(num) || num < 0) return
-    setBehaviorParams(prev => ({ ...prev, [key]: num }))
+    setBehaviorParams(prev => {
+      const updated = { ...prev, [key]: num }
+      // Save immediately when value is a valid number
+      const numericParams = {
+        firstDelaySec: typeof updated.firstDelaySec === 'string' ? (parseInt(updated.firstDelaySec, 10) || 30) : updated.firstDelaySec,
+        minIntervalSec: typeof updated.minIntervalSec === 'string' ? (parseInt(updated.minIntervalSec, 10) || 60) : updated.minIntervalSec,
+        maxIntervalSec: typeof updated.maxIntervalSec === 'string' ? (parseInt(updated.maxIntervalSec, 10) || 120) : updated.maxIntervalSec,
+        manualPauseSec: typeof updated.manualPauseSec === 'string' ? (parseInt(updated.manualPauseSec, 10) || 120) : updated.manualPauseSec,
+      }
+      if (numericParams.minIntervalSec > numericParams.maxIntervalSec) {
+        numericParams.maxIntervalSec = numericParams.minIntervalSec
+      }
+      window.controlAPI.saveBehaviorParams(numericParams)
+      return updated
+    })
   }, [])
 
   const handleSaveBehaviorParams = useCallback(() => {
     // Auto-correct: ensure min <= max
     const params = { ...behaviorParams }
-    if (params.minIntervalSec > params.maxIntervalSec) {
-      params.maxIntervalSec = params.minIntervalSec
-      setBehaviorParams(params)
+    // Convert string values to numbers, use defaults for empty strings
+    const numericParams = {
+      firstDelaySec: typeof params.firstDelaySec === 'string' ? (parseInt(params.firstDelaySec, 10) || 30) : params.firstDelaySec,
+      minIntervalSec: typeof params.minIntervalSec === 'string' ? (parseInt(params.minIntervalSec, 10) || 60) : params.minIntervalSec,
+      maxIntervalSec: typeof params.maxIntervalSec === 'string' ? (parseInt(params.maxIntervalSec, 10) || 120) : params.maxIntervalSec,
+      manualPauseSec: typeof params.manualPauseSec === 'string' ? (parseInt(params.manualPauseSec, 10) || 120) : params.manualPauseSec,
     }
-    window.controlAPI.saveBehaviorParams(params)
+    if (numericParams.minIntervalSec > numericParams.maxIntervalSec) {
+      numericParams.maxIntervalSec = numericParams.minIntervalSec
+    }
+    // Update state with numeric values
+    setBehaviorParams(numericParams)
+    window.controlAPI.saveBehaviorParams(numericParams)
   }, [behaviorParams])
 
   // Check if there are any valid random candidates
