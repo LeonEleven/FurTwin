@@ -35,6 +35,8 @@ export interface ExtractOptions {
   maskRegion?: string
   crop?: string
   centerCrop?: string
+  /** Output target: 'bundled' (default) or 'user-temp' (userData temp directory) */
+  outputTarget?: 'bundled' | 'user-temp'
 }
 
 export interface ExtractResult {

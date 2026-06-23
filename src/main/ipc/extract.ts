@@ -1,7 +1,7 @@
 import { app, dialog, ipcMain, BrowserWindow } from 'electron'
 import { spawn } from 'child_process'
 import { join, basename, extname } from 'path'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { IPC_CHANNELS, type ExtractOptions } from '../../shared/types'
 import { getExtractionOutputDir, getAssetMetadataPath, createGeneratedActionId, getUserExtractionTempActionDir } from '../services/actionPaths'
 
@@ -104,8 +104,9 @@ export function setupExtractFrames(): void {
     const sender = BrowserWindow.fromWebContents(event.sender)
     if (!sender) return
 
-    // Default to 'bundled' target (current behavior)
-    const outputResult = generateOutputDir('bundled')
+    // Use outputTarget from options, default to 'bundled'
+    const outputTarget = options.outputTarget || 'bundled'
+    const outputResult = generateOutputDir(outputTarget)
     const outputDir = outputResult.dir
     console.log(`[extract] output_dir: ${outputDir} (target: ${outputResult.target})`)
 
@@ -233,6 +234,15 @@ export function setupExtractFrames(): void {
         console.log(`[extract] EXTRACT_DONE result=${JSON.stringify(result)}`)
         safeSend(sender, IPC_CHANNELS.EXTRACT_DONE, result)
       } else {
+        // FFmpeg failed - clean up user-temp directory if applicable
+        if (outputResult.target === 'user-temp') {
+          try {
+            rmSync(outputDir, { recursive: true, force: true })
+            console.log(`[extract] cleaned up user-temp dir: ${outputDir}`)
+          } catch (e) {
+            console.warn('[extract] failed to cleanup user-temp dir:', e)
+          }
+        }
         safeSend(sender, IPC_CHANNELS.EXTRACT_ERROR, { code, message: `Exit code: ${code}` })
       }
     })
@@ -241,6 +251,15 @@ export function setupExtractFrames(): void {
       if (finished) return
       finished = true
       console.error(`[extract] spawn error: ${err.message}`)
+      // Clean up user-temp directory if applicable
+      if (outputResult.target === 'user-temp') {
+        try {
+          rmSync(outputDir, { recursive: true, force: true })
+          console.log(`[extract] cleaned up user-temp dir: ${outputDir}`)
+        } catch (e) {
+          console.warn('[extract] failed to cleanup user-temp dir:', e)
+        }
+      }
       safeSend(sender, IPC_CHANNELS.EXTRACT_ERROR, { code: -1, message: err.message })
     })
   })
