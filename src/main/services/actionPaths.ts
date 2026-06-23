@@ -164,3 +164,92 @@ export function getBundledActionsDir(): string {
 export function getBundledLocalConfigPath(): string {
   return LOCAL_CONFIG_PATH
 }
+
+// ─── userData extraction path helpers (P2D-2A - reserved for future use) ─────
+// These functions are NOT yet connected to any business logic.
+// They will be used in future phases to support FFmpeg extraction to userData.
+
+/**
+ * Generate a unique action ID for a new action.
+ * Uses timestamp + random suffix to avoid conflicts with existing directories.
+ * Format: <timestamp>_<random4chars> (e.g., "1782126340688_a3f2")
+ *
+ * NOTE: This function is NOT yet connected to any business logic.
+ */
+export function createGeneratedActionId(): string {
+  const timestamp = Date.now()
+  const random = Math.random().toString(36).substring(2, 6) // 4 random chars
+  return `${timestamp}_${random}`
+}
+
+/**
+ * Get the userData temp directory for extraction.
+ * Structure: <userData>/temp/extract
+ * Used as a staging area before moving to final location.
+ *
+ * NOTE: This function is NOT yet connected to any business logic.
+ */
+export function getUserExtractionTempDir(): string {
+  return join(getUserTempDir(), 'extract')
+}
+
+/**
+ * Get the temp directory for a specific action being extracted.
+ * Structure: <userData>/temp/extract/<actionId>
+ * Used during FFmpeg extraction, before moving to final location.
+ *
+ * NOTE: This function is NOT yet connected to any business logic.
+ */
+export function getUserExtractionTempActionDir(actionId: string): string {
+  return join(getUserExtractionTempDir(), actionId)
+}
+
+/**
+ * Get the final generated directory for a specific action.
+ * Structure: <userData>/actions/generated/<actionId>
+ * This is where completed actions are stored.
+ *
+ * NOTE: This function is NOT yet connected to any business logic.
+ */
+export function getUserGeneratedActionDir(actionId: string): string {
+  return join(getUserGeneratedDir(), actionId)
+}
+
+/**
+ * Get the frames directory for a specific action.
+ * Structure: <userData>/actions/generated/<actionId>
+ * (frames are stored directly in the action directory)
+ *
+ * NOTE: This function is NOT yet connected to any business logic.
+ */
+export function getUserActionFramesDir(actionId: string): string {
+  return getUserGeneratedActionDir(actionId)
+}
+
+/**
+ * Convert a userData action path to a furtwin-userdata:// protocol URL.
+ * Example: <userData>/actions/generated/123456
+ *       -> furtwin-userdata://actions/generated/123456
+ *
+ * This URL can be used as framesDir in local.config.json for userData actions.
+ *
+ * NOTE: This function is NOT yet connected to any business logic.
+ */
+export function toUserDataProtocolUrl(actionId: string): string {
+  return `furtwin-userdata://actions/generated/${actionId}`
+}
+
+/**
+ * Convert a userData action path to a renderer-accessible framesDir.
+ * For userData actions, this returns a furtwin-userdata:// protocol URL.
+ * For bundled actions, this returns a relative path.
+ *
+ * NOTE: This function is NOT yet connected to any business logic.
+ */
+export function toUserDataFramesDir(actionId: string, source: 'bundled' | 'user'): string {
+  if (source === 'user') {
+    return toUserDataProtocolUrl(actionId)
+  }
+  // For bundled actions, use relative path (current behavior)
+  return `./assets/actions/idle/generated/${actionId}`
+}
