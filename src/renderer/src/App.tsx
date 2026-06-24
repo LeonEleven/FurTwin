@@ -570,15 +570,20 @@ export function App() {
       </div>
 
       {/* 动作库 */}
-      {assets.length > 0 && (
-        <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 13, marginTop: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <p style={{ fontWeight: 600, margin: 0 }}>动作库</p>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button onClick={handleImportAsset} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }} title="从 zip 动作包导入动作资源。">导入动作包</button>
-              <button onClick={refreshAssets} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }} title="重新扫描动作库。">刷新</button>
-            </div>
+      <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 13, marginTop: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <p style={{ fontWeight: 600, margin: 0 }}>动作库</p>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button onClick={handleImportAsset} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }} title="从 zip 动作包导入动作资源。">导入动作包</button>
+            <button onClick={refreshAssets} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }} title="重新扫描动作库。">刷新</button>
           </div>
+        </div>
+        {assets.length === 0 && (
+          <p style={{ margin: 0, color: '#888', fontSize: 12, padding: '12px 0', textAlign: 'center' }}>
+            当前没有动作。你可以导入动作包，或从上方视频提取生成新动作。
+          </p>
+        )}
+        {assets.length > 0 && (<>
           <div style={{ maxHeight: 400, overflow: 'auto' }}>
             {assets.map((asset) => {
               const date = new Date(asset.modifiedAt)
@@ -735,8 +740,8 @@ export function App() {
               )
             })}
           </div>
-        </div>
-      )}
+        </>)}
+      </div>
     </div>
   )
 }
