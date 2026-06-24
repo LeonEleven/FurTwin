@@ -68,9 +68,29 @@ export function toActionFramesDir(entry: ActionEntry): string {
  * Scan all generated actions (without frame validation).
  * Returns entries sorted by modifiedAt descending (newest first).
  *
+ * Combines bundled actions (from src/renderer/public) and
+ * user actions (from userData/actions/generated).
+ *
  * Use case: Control panel action list, right-click menu
  */
 export function scanAllActions(): ActionEntry[] {
+  const bundledActions = scanBundledActions()
+  const userActions = scanUserActions()
+
+  // Merge bundled + user
+  const allActions = [...bundledActions, ...userActions]
+
+  // Sort by modifiedAt descending (newest first)
+  allActions.sort((a, b) => b.modifiedAt - a.modifiedAt)
+
+  return allActions
+}
+
+/**
+ * Scan bundled actions from src/renderer/public/assets/actions/idle/generated.
+ * This is the current behavior, unchanged.
+ */
+function scanBundledActions(): ActionEntry[] {
   const GENERATED_DIR = getGeneratedDir()
   if (!existsSync(GENERATED_DIR)) return []
 
@@ -98,7 +118,6 @@ export function scanAllActions(): ActionEntry[] {
     } catch {}
   }
 
-  assets.sort((a, b) => b.modifiedAt - a.modifiedAt)
   return assets
 }
 
