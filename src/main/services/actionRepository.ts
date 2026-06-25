@@ -283,7 +283,7 @@ export function validateActionName(name: string): { valid: boolean; error?: stri
 }
 
 /**
- * Check if a directory path is within the generated directory.
+ * Check if a directory path is within the bundled generated directory.
  * Prevents path traversal attacks and ensures we only operate on action assets.
  */
 export function isWithinGeneratedDir(dirPath: string): boolean {
@@ -307,21 +307,41 @@ export function isWithinGeneratedDir(dirPath: string): boolean {
 }
 
 /**
+ * Check if a directory path is within the userData generated directory.
+ * Prevents path traversal attacks and ensures we only operate on user action assets.
+ */
+export function isWithinUserGeneratedDir(dirPath: string): boolean {
+  const USER_GENERATED_DIR = getUserGeneratedDir()
+
+  try {
+    const resolvedPath = resolve(dirPath)
+    const resolvedUserGenerated = resolve(USER_GENERATED_DIR)
+
+    // Check if the path is exactly the user generated dir itself (should not allow deleting root)
+    if (resolvedPath === resolvedUserGenerated) return false
+
+    // Check if the path is within the user generated dir
+    const rel = relative(resolvedUserGenerated, resolvedPath)
+    // If relative path starts with '..', it's outside
+    // If relative path is empty or '.', it's the same directory
+    return !rel.startsWith('..') && rel !== '' && rel !== '.'
+  } catch {
+    return false
+  }
+}
+
+/**
  * Validate a directory path for write operations.
- * Ensures the path is within the generated directory and exists.
+ * Ensures the path is within either the bundled generated directory
+ * or the userData generated directory, and exists.
  */
 export function validateActionPath(dirPath: string): { valid: boolean; error?: string } {
   if (!dirPath || dirPath.trim().length === 0) {
     return { valid: false, error: '路径不能为空' }
   }
 
-  // Check for absolute paths that might bypass validation
-  // (isWithinGeneratedDir handles this via resolve, but we can fail early)
-  if (isAbsolute(dirPath) && !dirPath.startsWith(getGeneratedDir())) {
-    return { valid: false, error: '路径不在动作目录内' }
-  }
-
-  if (!isWithinGeneratedDir(dirPath)) {
+  // Check if it's within bundled generated dir OR userData generated dir
+  if (!isWithinGeneratedDir(dirPath) && !isWithinUserGeneratedDir(dirPath)) {
     return { valid: false, error: '路径不在动作目录内' }
   }
 
