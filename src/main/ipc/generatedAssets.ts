@@ -4,7 +4,7 @@ import { join } from 'path'
 import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, computeDisplayAnchor, toFramesDir, validateAssetInfo, type AssetInfo } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
-import { getGeneratedDir, getLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
+import { getGeneratedDir, getRuntimeLocalConfigPath, getBundledLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
 import { scanAllActions, validateActionPath, validateActionName, renameAction, deleteActionDir, getFallbackActionCandidate, buildFallbackRuntimeConfig, type ActionEntry } from '../services/actionRepository'
 
 const GENERATED_DIR = getGeneratedDir()
@@ -72,6 +72,7 @@ export function setupGeneratedAssets(): void {
 
     // Deleted the active asset — find fallback
     const LOCAL_CONFIG_PATH = localConfigPath
+    const BUNDLED_CONFIG_PATH = getBundledLocalConfigPath()
 
     // Delegate fallback candidate selection to actionRepository
     const fallback = getFallbackActionCandidate(deletedDirName)
@@ -84,10 +85,15 @@ export function setupGeneratedAssets(): void {
         return { ok: false, error: 'Failed to build runtime config' }
       }
       // Preserve existing behavior params when writing fallback config
+      // Priority: userData config > bundled config > empty
       let existingConfig: Record<string, any> = {}
       if (existsSync(LOCAL_CONFIG_PATH)) {
         try {
           existingConfig = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+        } catch {}
+      } else if (existsSync(BUNDLED_CONFIG_PATH)) {
+        try {
+          existingConfig = JSON.parse(readFileSync(BUNDLED_CONFIG_PATH, 'utf-8'))
         } catch {}
       }
       const mergedConfig = {
@@ -108,12 +114,24 @@ export function setupGeneratedAssets(): void {
       console.log('[generated] deleted active, no remaining assets, restored demo')
     }
 
-    // Notify pet to reload
-    BrowserWindow.getAllWindows().forEach(win => {
-      if (!win.isDestroyed()) {
-        try { win.webContents.send(IPC_CHANNELS.RELOAD_ANIM) } catch {}
+    // Notify pet to switch animation
+    if (fallback) {
+      const runtimeConfig = buildFallbackRuntimeConfig(fallback)
+      if (runtimeConfig) {
+        BrowserWindow.getAllWindows().forEach(win => {
+          if (!win.isDestroyed()) {
+            try { win.webContents.send(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, runtimeConfig) } catch {}
+          }
+        })
       }
-    })
+    } else {
+      // No fallback, send RELOAD_ANIM to use demo
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) {
+          try { win.webContents.send(IPC_CHANNELS.RELOAD_ANIM) } catch {}
+        }
+      })
+    }
 
     // Notify control panel to refresh
     const cp = getControlPanel()

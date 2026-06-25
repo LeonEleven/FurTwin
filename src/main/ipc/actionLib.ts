@@ -4,15 +4,16 @@ import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
 import { loadAssetInfo, validateAssetInfo, computeDisplayAnchor } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { pauseAutoBehavior } from '../behavior'
-import { getLocalConfigPath } from '../services/actionPaths'
+import { getRuntimeLocalConfigPath, getBundledLocalConfigPath } from '../services/actionPaths'
 import { findActionByPath, toActionFramesDir } from '../services/actionRepository'
 
-const LOCAL_CONFIG_PATH = getLocalConfigPath()
+const LOCAL_CONFIG_PATH = getRuntimeLocalConfigPath()
+const BUNDLED_CONFIG_PATH = getBundledLocalConfigPath()
 
-function notifyPetReload() {
+function notifyPetSwitchAnim(config: AnimConfig) {
   BrowserWindow.getAllWindows().forEach(win => {
     if (!win.isDestroyed()) {
-      try { win.webContents.send(IPC_CHANNELS.RELOAD_ANIM) } catch {}
+      try { win.webContents.send(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, config) } catch {}
     }
   })
 }
@@ -64,10 +65,15 @@ export function setupActionLib(): void {
 
     try {
       // Preserve existing behavior params when writing action config
+      // Priority: userData config > bundled config > empty
       let existingConfig: Record<string, any> = {}
       if (existsSync(LOCAL_CONFIG_PATH)) {
         try {
           existingConfig = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+        } catch {}
+      } else if (existsSync(BUNDLED_CONFIG_PATH)) {
+        try {
+          existingConfig = JSON.parse(readFileSync(BUNDLED_CONFIG_PATH, 'utf-8'))
         } catch {}
       }
       // Merge: action config fields + preserved behavior params
@@ -87,7 +93,8 @@ export function setupActionLib(): void {
     }
 
     setTimeout(() => {
-      notifyPetReload()
+      // Send runtime config directly to pet window (no fetch needed)
+      notifyPetSwitchAnim(config)
       // Also notify control panel to refresh "current use" status
       const cp = getControlPanel()
       if (cp && !cp.isDestroyed()) {

@@ -6,7 +6,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { execSync } from 'child_process'
-import { getGeneratedDir, getLocalConfigPath, toRendererPath } from '../services/actionPaths'
+import { getGeneratedDir, getRuntimeLocalConfigPath, getBundledLocalConfigPath, toRendererPath } from '../services/actionPaths'
 
 const METADATA_FILE = 'asset-metadata.json'
 
@@ -182,7 +182,8 @@ export function toFramesDir(assetPath: string): string {
   return toRendererPath(assetPath)
 }
 
-const LOCAL_CONFIG_PATH = getLocalConfigPath()
+const LOCAL_CONFIG_PATH = getRuntimeLocalConfigPath()
+const BUNDLED_CONFIG_PATH = getBundledLocalConfigPath()
 const GENERATED_DIR = getGeneratedDir()
 
 /**
@@ -288,18 +289,21 @@ export function clearAllDefaults(): void {
  * Returns the asset directory name (e.g. "1781754837975") or null if in demo mode.
  *
  * Logic:
- * - Read local.config.json framesDir
+ * - Read local.config.json framesDir (priority: userData > bundled)
  * - Normalize path separators to /
  * - Match generated/<id> pattern
  * - If framesDir points to demo frames (not generated/), return null
  */
 export function getActiveAssetId(): string | null {
-  if (!existsSync(LOCAL_CONFIG_PATH)) return null
+  // Priority: userData config > bundled config
+  const configPath = existsSync(LOCAL_CONFIG_PATH) ? LOCAL_CONFIG_PATH :
+                     existsSync(BUNDLED_CONFIG_PATH) ? BUNDLED_CONFIG_PATH : null
+  if (!configPath) return null
   try {
-    const config = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'))
     const framesDir: string = config.framesDir || ''
     const normalized = framesDir.replace(/\\/g, '/')
-    // Match: ./assets/actions/idle/generated/<id>
+    // Match: ./assets/actions/idle/generated/<id> or furtwin-userdata://actions/generated/<id>
     const match = normalized.match(/generated\/([^/]+)/)
     return match ? match[1] : null
   } catch {

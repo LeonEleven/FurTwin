@@ -16,7 +16,7 @@ import { join } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../shared/types'
 import { loadAssetInfo, getActiveAssetId, computeDisplayAnchor, type AssetInfo } from './utils/assetInfo'
 import { getControlPanel } from './windows/controlPanel'
-import { getGeneratedDir, getLocalConfigPath, getPublicDir } from './services/actionPaths'
+import { getGeneratedDir, getLocalConfigPath, getRuntimeLocalConfigPath, getBundledLocalConfigPath, getPublicDir } from './services/actionPaths'
 import { scanValidActions, toActionFramesDir, type ActionEntry } from './services/actionRepository'
 
 // ─── Constants ──────────────────────────────────────────
@@ -30,7 +30,8 @@ const DEFAULT_MANUAL_PAUSE_SEC = 120
 const MIN_IDLE_DWELL_SEC = 8  // Minimum time to stay on idle before next auto-insert
 
 const GENERATED_DIR = getGeneratedDir()
-const LOCAL_CONFIG_PATH = getLocalConfigPath()
+const LOCAL_CONFIG_PATH = getRuntimeLocalConfigPath()
+const BUNDLED_CONFIG_PATH = getBundledLocalConfigPath()
 const PUBLIC_DIR = getPublicDir()
 
 // ─── State ──────────────────────────────────────────────
@@ -77,12 +78,18 @@ function getParams(): BehaviorParams {
 // ─── Persistence ────────────────────────────────────────
 
 function readLocalConfig(): Record<string, any> {
-  if (!existsSync(LOCAL_CONFIG_PATH)) return {}
-  try {
-    return JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
-  } catch {
-    return {}
+  // Priority: userData config > bundled config > empty
+  if (existsSync(LOCAL_CONFIG_PATH)) {
+    try {
+      return JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+    } catch {}
   }
+  if (existsSync(BUNDLED_CONFIG_PATH)) {
+    try {
+      return JSON.parse(readFileSync(BUNDLED_CONFIG_PATH, 'utf-8'))
+    } catch {}
+  }
+  return {}
 }
 
 function loadAutoBehaviorEnabled(): boolean {

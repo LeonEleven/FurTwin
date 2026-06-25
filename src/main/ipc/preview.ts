@@ -4,10 +4,11 @@ import { join } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
 import { getControlPanel } from '../windows/controlPanel'
 import { pauseAutoBehavior } from '../behavior'
-import { getLocalConfigPath, getPublicDir, getFramesRealDir, toRendererPath, getUserGeneratedDir } from '../services/actionPaths'
+import { getLocalConfigPath, getRuntimeLocalConfigPath, getBundledLocalConfigPath, getPublicDir, getFramesRealDir, toRendererPath, getUserGeneratedDir } from '../services/actionPaths'
 import { isUserDataProtocolUrl } from '../services/userDataProtocol'
 
-const LOCAL_CONFIG_PATH = getLocalConfigPath()
+const LOCAL_CONFIG_PATH = getRuntimeLocalConfigPath()
+const BUNDLED_CONFIG_PATH = getBundledLocalConfigPath()
 const PUBLIC_DIR = getPublicDir()
 
 function getPngDimensions(filePath: string): { width: number; height: number } | null {
@@ -32,11 +33,11 @@ function scanFrames(dir: string): { count: number; width: number; height: number
   return null
 }
 
-function notifyPetWindows() {
+function notifyPetSwitchAnim(config: AnimConfig) {
   BrowserWindow.getAllWindows().forEach((win) => {
     try {
       if (!win.isDestroyed()) {
-        win.webContents.send(IPC_CHANNELS.RELOAD_ANIM)
+        win.webContents.send(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, config)
       }
     } catch {}
   })
@@ -165,10 +166,15 @@ export function setupPreview(): void {
 
     try {
       // Preserve existing behavior params when writing action config
+      // Priority: userData config > bundled config > empty
       let existingConfig: Record<string, any> = {}
       if (existsSync(LOCAL_CONFIG_PATH)) {
         try {
           existingConfig = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+        } catch {}
+      } else if (existsSync(BUNDLED_CONFIG_PATH)) {
+        try {
+          existingConfig = JSON.parse(readFileSync(BUNDLED_CONFIG_PATH, 'utf-8'))
         } catch {}
       }
       // Merge: action config fields + preserved behavior params
@@ -188,7 +194,8 @@ export function setupPreview(): void {
     }
 
     setTimeout(() => {
-      notifyPetWindows()
+      // Send runtime config directly to pet window
+      notifyPetSwitchAnim(config)
     }, 100)
   })
 

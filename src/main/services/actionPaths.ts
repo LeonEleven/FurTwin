@@ -159,10 +159,30 @@ export function getBundledActionsDir(): string {
 
 /**
  * Get the bundled local.config.json path.
- * Currently used by all business logic.
+ * This is the default config shipped with the app.
+ * Used as fallback when userData config doesn't exist.
  */
 export function getBundledLocalConfigPath(): string {
   return LOCAL_CONFIG_PATH
+}
+
+/**
+ * Get the userData local.config.json path.
+ * This is where runtime config should be written.
+ * Structure: <userData>/local.config.json
+ */
+export function getUserLocalConfigPath(): string {
+  return join(getUserDataRootDir(), 'local.config.json')
+}
+
+/**
+ * Get the runtime local.config.json path.
+ * This is the single path used for all runtime config reads/writes.
+ * Reads: prioritize userData, fallback to bundled.
+ * Writes: always to userData.
+ */
+export function getRuntimeLocalConfigPath(): string {
+  return getUserLocalConfigPath()
 }
 
 // ─── userData extraction path helpers (P2D-2A - reserved for future use) ─────
