@@ -5,7 +5,7 @@ import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, computeDisplayAnchor, toFramesDir, validateAssetInfo, type AssetInfo } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { getGeneratedDir, getRuntimeLocalConfigPath, getBundledLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
-import { scanAllActions, validateActionPath, validateActionName, renameAction, deleteActionDir, getFallbackActionCandidate, buildFallbackRuntimeConfig, type ActionEntry } from '../services/actionRepository'
+import { scanAllActions, validateActionPath, validateActionName, renameAction, deleteActionDir, getFallbackActionCandidate, buildFallbackRuntimeConfig, findActionByPath, toActionFramesDir, type ActionEntry } from '../services/actionRepository'
 
 const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
@@ -56,7 +56,7 @@ export function setupGeneratedAssets(): void {
     const resolved = join(payload.path)
     const deletedDirName = resolved.split(/[/\\]/).pop() || ''
     const wasActive = getActiveAssetId() === deletedDirName
-    const localConfigPath = getLocalConfigPath()
+    const localConfigPath = getRuntimeLocalConfigPath()
 
     // Delegate directory deletion to actionRepository
     const deleteResult = deleteActionDir(payload.path)
@@ -173,21 +173,24 @@ export function setupGeneratedAssets(): void {
           const info = loadAssetInfo(payload.path, dirName!)
           if (info && !validateAssetInfo(info)) {
             const anchor = computeDisplayAnchor(info)
+            // Use toActionFramesDir to get renderer-safe URL (protocol URL in packaged mode)
+            const entry = findActionByPath(payload.path)
+            const framesDir = entry ? toActionFramesDir(entry) : toFramesDir(payload.path)
             const config = {
-              name: info.name, label: info.name, framesDir: toFramesDir(payload.path),
+              name: info.name, label: info.name, framesDir,
               fps: info.fpsOverride ?? 12, scale: 0.5, displayScale: info.displayScale,
               loop: info.loop, frameCount: info.frameCount, frameWidth: info.frameWidth,
               frameHeight: info.frameHeight, framePattern: `{}.${info.format}`,
               anchorX: anchor?.anchorX, anchorY: anchor?.anchorY,
             }
-            writeFileSync(getLocalConfigPath(), JSON.stringify(config, null, 2), 'utf-8')
-            // Notify pet to reload with new anchor
+            writeFileSync(getRuntimeLocalConfigPath(), JSON.stringify(config, null, 2), 'utf-8')
+            // Send config directly to pet (not RELOAD_ANIM which re-fetches from file)
             BrowserWindow.getAllWindows().forEach(win => {
               if (!win.isDestroyed()) {
-                try { win.webContents.send(IPC_CHANNELS.RELOAD_ANIM) } catch {}
+                try { win.webContents.send(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, config) } catch {}
               }
             })
-            console.log(`[generated] active asset anchor updated, pet reloaded`)
+            console.log(`[generated] active asset anchor updated, pet reloaded with framesDir=${framesDir}`)
           }
         }
       }

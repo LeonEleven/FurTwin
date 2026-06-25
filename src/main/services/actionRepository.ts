@@ -14,6 +14,8 @@ import { existsSync, readdirSync, statSync, readFileSync, writeFileSync, rmSync 
 import { join, resolve, relative, isAbsolute } from 'path'
 import { loadAssetInfo, getActiveAssetId, toFramesDir, computeDisplayAnchor, type AssetInfo } from '../utils/assetInfo'
 import { getGeneratedDir, getPublicDir, getAssetMetadataPath, getUserGeneratedDir, toUserDataProtocolUrl } from './actionPaths'
+import { toBundledProtocolUrl } from './userDataProtocol'
+import { app } from 'electron'
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -46,19 +48,20 @@ export interface RuntimeAssetConfig {
 
 /**
  * Generate the correct framesDir for an action based on its source.
- * - bundled: returns renderer-relative path (./assets/actions/idle/generated/<id>)
+ * - bundled (dev): returns renderer-relative path (./assets/actions/idle/generated/<id>)
+ * - bundled (packaged): returns furtwin-bundled:// protocol URL
  * - user: returns furtwin-userdata:// protocol URL
- *
- * This is a pure function that does NOT read/write any files.
- * It will be used in future phases to support user-writable action storage.
- *
- * NOTE: This function is NOT yet connected to any business logic.
  */
 export function toActionFramesDir(entry: ActionEntry): string {
   if (entry.source === 'user') {
     return toUserDataProtocolUrl(entry.id)
   }
-  // For bundled actions, use existing renderer-relative path
+  // In packaged mode, renderer can't resolve relative URLs to extraResources.
+  // Use furtwin-bundled:// protocol to serve from process.resourcesPath.
+  if (app.isPackaged) {
+    return toBundledProtocolUrl(entry.id)
+  }
+  // Dev mode: renderer-relative path (Vite dev server resolves correctly)
   return toFramesDir(entry.path)
 }
 

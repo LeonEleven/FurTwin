@@ -10,10 +10,11 @@ import { setupAssetPackage } from './ipc/assetPackage'
 import { setupActionLib } from './ipc/actionLib'
 import { setupPreview } from './ipc/preview'
 import { setupPetShape } from './ipc/petShape'
-import { registerUserDataProtocol, setupUserDataProtocolHandler } from './services/userDataProtocol'
+import { registerUserDataProtocol, setupUserDataProtocolHandler, registerBundledProtocol, setupBundledProtocolHandler } from './services/userDataProtocol'
 
-// Register userData protocol scheme before app is ready
+// Register protocol schemes before app is ready
 registerUserDataProtocol()
+registerBundledProtocol()
 
 Menu.setApplicationMenu(null)
 
@@ -21,6 +22,10 @@ app.whenReady().then(() => {
   // Setup userData protocol handler (P2D-1A)
   // This provides read-only access to userData/actions/generated for future use
   setupUserDataProtocolHandler()
+
+  // Setup bundled protocol handler (P2E-5B)
+  // Serves bundled action frames from resourcesPath in packaged mode
+  setupBundledProtocolHandler()
 
   // 启动时验证上次动作是否仍可用（无效则自动回退到 Demo）
   validateStartupConfig()

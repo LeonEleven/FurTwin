@@ -5,7 +5,7 @@
  *   node scripts/extract-transparent-frames.mjs --input <视频路径> [选项]
  */
 
-import { execSync } from 'child_process'
+import { execSync, spawnSync } from 'child_process'
 import { existsSync, mkdirSync, readdirSync, unlinkSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { PNG } from 'pngjs'
@@ -92,8 +92,8 @@ FFmpeg 绿幕扣除 -> 透明序列帧
 // ─── 工具函数 ────────────────────────────────────────────
 
 function getVideoSize(inputPath) {
-  const cmd = `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "${inputPath}"`
-  const output = execSync(cmd, { encoding: 'utf8', shell: true }).trim()
+  const result = spawnSync(ffprobeBin, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', inputPath], { encoding: 'utf8', shell: true, windowsHide: true })
+  const output = (result.stdout || '').trim()
   const [width, height] = output.split(',').map(Number)
   if (!width || !height) {
     console.error('错误: 无法获取视频分辨率')
@@ -297,6 +297,10 @@ const cropArg = args['crop'] || null
 const centerCrop = args['center-crop'] || null
 const cropPreset = args['crop-preset'] || null
 const maskRegion = args['mask-region'] || null
+
+// FFmpeg/ffprobe paths (passed from main process)
+const ffmpegBin = args['ffmpeg-bin'] || 'ffmpeg'
+const ffprobeBin = args['ffprobe-bin'] || 'ffprobe'
 const maskPreset = args['mask-preset'] || null
 const clean = args.clean !== 'false' && args.clean !== '0'
 const trimAlpha = args['trim-alpha'] !== 'false' && args['trim-alpha'] !== '0'
@@ -310,10 +314,11 @@ const keepLargestComponent = args['keep-largest-component'] !== 'false' && args[
 // ─── 前置检查 ────────────────────────────────────────────
 
 try {
-  const version = execSync('ffmpeg -version', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
+  const version = execSync(`"${ffmpegBin}" -version`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
   console.log(`[OK] FFmpeg: ${version.split('\n')[0]}`)
 } catch {
-  console.error('错误: FFmpeg 未安装或不在 PATH 中')
+  console.error(`错误: FFmpeg 未找到或无法执行: ${ffmpegBin}`)
+  console.error('请安装 FFmpeg 并添加到系统 PATH，或使用 --ffmpeg-bin 参数指定路径')
   process.exit(1)
 }
 
@@ -420,7 +425,7 @@ const vf = filters.join(',')
 const ext = format === 'webp' ? 'webp' : 'png'
 const outputTemplate = join(outputDir, `%04d.${ext}`)
 
-const parts = ['ffmpeg', '-i', `"${resolvedInput}"`, '-vf', `"${vf}"`]
+const parts = [`"${ffmpegBin}"`, '-i', `"${resolvedInput}"`, '-vf', `"${vf}"`]
 if (format === 'webp') parts.push('-lossless', '0', '-quality', '90')
 parts.push(`"${outputTemplate}"`)
 const cmd = parts.join(' ')
@@ -438,7 +443,7 @@ console.log('执行中...')
 console.log('')
 
 try {
-  execSync(cmd, { stdio: 'inherit', shell: true })
+  spawnSync(cmd, { stdio: 'inherit', shell: true, windowsHide: true })
 } catch {
   console.error('\n[ERR] FFmpeg 执行失败')
   process.exit(1)

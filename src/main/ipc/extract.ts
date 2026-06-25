@@ -1,9 +1,10 @@
 import { app, dialog, ipcMain, BrowserWindow } from 'electron'
 import { spawn } from 'child_process'
-import { join, basename, extname } from 'path'
+import { join, basename, extname, dirname } from 'path'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync, renameSync } from 'fs'
 import { IPC_CHANNELS, type ExtractOptions } from '../../shared/types'
 import { getExtractionOutputDir, getAssetMetadataPath, createGeneratedActionId, getUserExtractionTempActionDir, getUserGeneratedActionDir } from '../services/actionPaths'
+import { getFfmpegPath, getFfprobePath, getFfmpegNotFoundMessage } from '../services/ffmpegPath'
 
 const isDev = !app.isPackaged
 
@@ -43,17 +44,43 @@ function generateOutputDir(target: OutputTarget = 'bundled'): OutputDirResult {
   return { dir, actionId, target }
 }
 
+/**
+ * Resolve the Node.js executable for running scripts.
+ * - Dev: use npm_node_execpath or system node
+ * - Packaged: use process.execPath (Electron) with ELECTRON_RUN_AS_NODE=1
+ */
 function resolveNodeExecutable(): string {
-  const npmNode = process.env.npm_node_execpath
-  if (npmNode && existsSync(npmNode)) return npmNode
-  const nodeExe = process.env.NODE_EXE
-  if (nodeExe && existsSync(nodeExe)) return nodeExe
-  return 'node'
+  if (isDev) {
+    const npmNode = process.env.npm_node_execpath
+    if (npmNode && existsSync(npmNode)) return npmNode
+    const nodeExe = process.env.NODE_EXE
+    if (nodeExe && existsSync(nodeExe)) return nodeExe
+    return 'node'
+  }
+  // Packaged: use Electron's process.execPath
+  // The caller should set ELECTRON_RUN_AS_NODE=1 in env
+  return process.execPath
 }
 
+/**
+ * Get the path to the extract script.
+ * - Dev: project root/scripts/extract-transparent-frames.mjs
+ * - Packaged: process.resourcesPath/scripts/extract-transparent-frames.mjs
+ */
 function getScriptPath(): string {
-  if (isDev) return join(process.cwd(), 'scripts', 'extract-transparent-frames.mjs')
-  return join(process.resourcesPath, 'scripts', 'extract-transparent-frames.mjs')
+  let scriptPath: string
+  if (isDev) {
+    scriptPath = join(process.cwd(), 'scripts', 'extract-transparent-frames.mjs')
+  } else {
+    scriptPath = join(process.resourcesPath, 'scripts', 'extract-transparent-frames.mjs')
+  }
+
+  if (!existsSync(scriptPath)) {
+    console.error(`[extract] script not found: ${scriptPath}`)
+    throw new Error(`提取脚本未找到: ${scriptPath}`)
+  }
+
+  return scriptPath
 }
 
 function safeSend(win: BrowserWindow | null, channel: string, ...args: unknown[]) {
@@ -106,12 +133,32 @@ export function setupExtractFrames(): void {
 
     // Use outputTarget from options, default to 'user-temp' (userData)
     const outputTarget = options.outputTarget || 'user-temp'
-    const outputResult = generateOutputDir(outputTarget)
+    let outputResult: { dir: string; actionId: string; target: string }
+    try {
+      outputResult = generateOutputDir(outputTarget)
+    } catch (e) {
+      console.error('[extract] failed to generate output dir:', e)
+      safeSend(sender, IPC_CHANNELS.EXTRACT_ERROR, { code: -1, message: `无法创建输出目录: ${e}` })
+      return
+    }
     const outputDir = outputResult.dir
     console.log(`[extract] output_dir: ${outputDir} (target: ${outputResult.target})`)
 
     const nodeExec = resolveNodeExecutable()
-    const scriptPath = getScriptPath()
+    let scriptPath: string
+    try {
+      scriptPath = getScriptPath()
+    } catch (e) {
+      console.error('[extract] failed to get script path:', e)
+      safeSend(sender, IPC_CHANNELS.EXTRACT_ERROR, { code: -1, message: `${e}` })
+      return
+    }
+
+    // Get FFmpeg and ffprobe paths
+    const ffmpegPath = getFfmpegPath()
+    const ffprobePath = getFfprobePath()
+    console.log(`[extract] ffmpeg: ${ffmpegPath}`)
+    console.log(`[extract] ffprobe: ${ffprobePath}`)
 
     const args = [scriptPath, '--input', options.input, '--output', outputDir]
     args.push('--fps', String(options.fps))
@@ -120,6 +167,8 @@ export function setupExtractFrames(): void {
     args.push('--despill', String(options.despill))
     args.push('--format', options.format)
     args.push('--clean', 'true')
+    args.push('--ffmpeg-bin', ffmpegPath)
+    args.push('--ffprobe-bin', ffprobePath)
 
     if (options.trimAlpha !== false) {
       args.push('--trim-alpha', 'true')
@@ -134,10 +183,18 @@ export function setupExtractFrames(): void {
     console.log(`[extract] node: ${nodeExec}`)
     console.log(`[extract] script: ${scriptPath}`)
 
+    // Prepare environment variables
+    const env = { ...process.env }
+    // If using Electron's process.execPath, set ELECTRON_RUN_AS_NODE
+    if (!isDev && nodeExec === process.execPath) {
+      env.ELECTRON_RUN_AS_NODE = '1'
+    }
+
     const child = spawn(nodeExec, args, {
       shell: false,
       windowsHide: true,
       cwd: process.cwd(),
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 
@@ -249,8 +306,9 @@ export function setupExtractFrames(): void {
             return
           }
 
-          // Move temp to final
+          // Move temp to final (ensure parent directory exists)
           try {
+            mkdirSync(dirname(finalDir), { recursive: true })
             renameSync(outputDir, finalDir)
             finalOutputDir = finalDir
             console.log(`[extract] moved user-temp to final: ${finalDir}`)

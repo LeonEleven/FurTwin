@@ -6,13 +6,17 @@
  * Future phases may redirect user-writable paths to app.getPath('userData').
  *
  * P2B Phase: Added userData path functions for future use (not yet connected to business logic).
+ * P2E-5A: Packaged mode uses process.resourcesPath for bundled action paths.
  */
 
 import { resolve, join } from 'path'
 import { app } from 'electron'
 
 // ─── Current directories (development + packaged compatible) ─────────────────
-const PUBLIC_DIR = resolve('src/renderer/public')
+// Dev: src/renderer/public (source tree)
+// Packaged: process.resourcesPath (extraResources target: resources/assets/actions/idle/)
+const isPackaged = app.isPackaged
+const PUBLIC_DIR = isPackaged ? process.resourcesPath : resolve('src/renderer/public')
 const ACTIONS_DIR = join(PUBLIC_DIR, 'assets/actions/idle')
 
 // User-writable paths (currently under PUBLIC_DIR, may move to userData later)
@@ -21,7 +25,7 @@ export const LOCAL_CONFIG_PATH = join(ACTIONS_DIR, 'local.config.json')
 
 // Read-only paths
 export const FRAMES_DIR = join(ACTIONS_DIR, 'frames')
-export const FRAMES_REAL_DIR = join(ACTIONS_DIR, 'frames_real')
+export const FRAMES_REAL_DIR = isPackaged ? join(app.getPath('userData'), 'temp', 'frames_real') : join(ACTIONS_DIR, 'frames_real')
 
 // ─── userData paths (P2B - reserved for future use) ─────────────────────────
 // These functions are NOT yet connected to any business logic.
@@ -71,21 +75,48 @@ export function getAssetMetadataPath(assetDir: string): string {
 }
 
 /**
- * Convert an absolute asset path to a renderer-relative framesDir.
- * Example: /abs/path/src/renderer/public/assets/actions/idle/generated/123
- *       -> ./assets/actions/idle/generated/123
+ * Convert an absolute asset path to a renderer-safe framesDir.
+ * - Dev mode bundled: returns relative path (./assets/actions/idle/generated/<id>)
+ * - Packaged mode bundled: returns relative path (same — used for config file only)
+ * - userData paths: returns furtwin-userdata:// protocol URL
+ *
+ * NOTE: For sending framesDir to the renderer via IPC, use toActionFramesDir() instead.
+ * This function is for config file writing and dev-mode preview.
  */
 export function toRendererPath(absolutePath: string): string {
-  return './' + absolutePath.replace(PUBLIC_DIR, '').replace(/\\/g, '/')
+  // If path is under userData, use protocol URL
+  const userDataDir = app.getPath('userData')
+  if (absolutePath.startsWith(userDataDir)) {
+    const rel = absolutePath.slice(userDataDir.length).replace(/\\/g, '/').replace(/^\//, '')
+    return `furtwin-userdata://${rel}`
+  }
+  const rel = absolutePath.replace(PUBLIC_DIR, '').replace(/\\/g, '/').replace(/^\//, '')
+  return `./${rel}`
 }
 
 /**
  * Convert a renderer-relative framesDir to an absolute path.
+ * Handles: relative paths, furtwin-userdata:// URLs, furtwin-bundled:// URLs.
  * Example: ./assets/actions/idle/generated/123
  *       -> /abs/path/src/renderer/public/assets/actions/idle/generated/123
  */
 export function toAbsoluteFramesDir(rendererPath: string): string {
-  return join(PUBLIC_DIR, rendererPath.replace(/^\.\//, ''))
+  // Handle furtwin-bundled:// protocol (packaged mode bundled actions)
+  if (rendererPath.startsWith('furtwin-bundled://')) {
+    const match = rendererPath.match(/furtwin-bundled:\/\/(.+)/)
+    if (match) {
+      return join(process.resourcesPath, 'assets', match[1])
+    }
+  }
+  // Handle furtwin-userdata:// protocol (userData actions)
+  if (rendererPath.startsWith('furtwin-userdata://')) {
+    const match = rendererPath.match(/furtwin-userdata:\/\/actions\/generated\/([^/]+)/)
+    if (match) {
+      return join(getUserGeneratedDir(), match[1])
+    }
+  }
+  // Relative path (dev mode) — strip leading ./ and any leading /
+  return join(PUBLIC_DIR, rendererPath.replace(/^\.\//, '').replace(/^\//, ''))
 }
 
 /**

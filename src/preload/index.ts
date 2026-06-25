@@ -61,6 +61,19 @@ contextBridge.exposeInMainWorld('petAPI', {
     ipcRenderer.on(IPC_CHANNELS.PET_SHAPE_UPDATED, handler)
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.PET_SHAPE_UPDATED, handler) }
   },
+  // --- 启动握手：renderer 准备好后通知 main ---
+  sendRendererReady: () => {
+    ipcRenderer.send(IPC_CHANNELS.PET_RENDERER_READY)
+  },
+  // --- 清除 runtime config（恢复 demo 时使用） ---
+  clearRuntimeConfig: () => {
+    ipcRenderer.send(IPC_CHANNELS.CLEAR_RUNTIME_CONFIG)
+  },
+  onClearRuntimeConfig: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC_CHANNELS.CLEAR_RUNTIME_CONFIG, handler)
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.CLEAR_RUNTIME_CONFIG, handler) }
+  },
   // --- 行为系统：运行时切换动画（不写 local.config.json） ---
   onSwitchAnimRuntime: (callback: (config: any) => void) => {
     const handler = (_: unknown, config: any) => callback(config)

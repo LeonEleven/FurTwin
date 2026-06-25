@@ -89,6 +89,9 @@ declare global {
       clearPetShape: () => void
       applyFrameShape: (frameIndex: number) => void
       onPetShapeUpdated: (callback: (info: { rects: number; activeBlocks: number; totalBlocks: number }) => void) => () => void
+      sendRendererReady: () => void
+      clearRuntimeConfig: () => void
+      onClearRuntimeConfig: (callback: () => void) => () => void
       onSwitchAnimRuntime: (callback: (config: AnimConfig) => void) => () => void
       notifyPlaybackComplete: () => void
       triggerClickInteraction: () => void

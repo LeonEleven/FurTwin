@@ -1,0 +1,32 @@
+appId: com.furtwin.app
+productName: FurTwin
+directories:
+  buildResources: build
+files:
+  - "!**/.vscode/*"
+  - "!src/*"
+  - "!electron.vite.config.*"
+  - "!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
+  - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+asarUnpack:
+  - resources/bin/**
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter:
+      - "**/*"
+  - from: scripts/extract-transparent-frames.mjs
+    to: scripts/extract-transparent-frames.mjs
+  - from: src/renderer/public/assets/actions/idle
+    to: assets/actions/idle
+    filter:
+      - "**/*.json"
+      - "**/*.png"
+      - "**/*.webp"
+win:
+  executableName: furtwin
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always

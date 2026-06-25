@@ -35,6 +35,8 @@ function PetApp() {
   const [reloadKey, setReloadKey] = useState(0)
   const reloadIdRef = useRef(0)
   const runtimeConfigRef = useRef<AnimConfig | null>(null)
+  // Guard: ignore RELOAD_ANIM until first SWITCH_ANIM_RUNTIME arrives from main
+  const startupPendingRef = useRef(true)
 
   const loadConfig = useCallback(() => {
     const currentReloadId = ++reloadIdRef.current
@@ -42,10 +44,10 @@ function PetApp() {
 
     window.petAPI.clearPetShape()
 
-    // If a runtime config was set by behavior system, use it directly
+    // If a runtime config was set by main process, use it directly
+    // Keep the ref set so subsequent RELOAD_ANIM calls also use it
     if (runtimeConfigRef.current) {
       const rc = runtimeConfigRef.current
-      runtimeConfigRef.current = null
       if (reloadIdRef.current !== currentReloadId) return
       logConfig('runtime', rc)
       setConfig(rc)
@@ -100,9 +102,8 @@ function PetApp() {
       })
   }, [])
 
-  useEffect(() => {
-    loadConfig()
-  }, [loadConfig])
+  // No initial loadConfig() — wait for main process to push startup config
+  // via SWITCH_ANIM_RUNTIME (triggered by PET_RENDERER_READY handshake)
 
   // 右键菜单 → 重新加载动画
   useEffect(() => {
@@ -115,11 +116,16 @@ function PetApp() {
     return removeListener
   }, [loadConfig])
 
-  // 控制面板 -> RELOAD_ANIM (always reads from file, ignores runtime config)
+  // 控制面板 -> RELOAD_ANIM
+  // Guarded: ignore during startup until first SWITCH_ANIM_RUNTIME arrives
+  // NOTE: does NOT clear runtimeConfigRef — preserves current action across reloads
   useEffect(() => {
     const removeListener = window.petAPI.onReloadAnim(() => {
+      if (startupPendingRef.current) {
+        console.log('[pet] RELOAD_ANIM ignored (startup pending)')
+        return
+      }
       console.log('[pet] RELOAD_ANIM received')
-      runtimeConfigRef.current = null // clear any pending runtime config
       loadConfig()
     })
     return removeListener
@@ -133,16 +139,34 @@ function PetApp() {
     return removeListener
   }, [])
 
+  // 恢复 demo：清除 runtime config 并从文件加载
+  useEffect(() => {
+    const removeListener = window.petAPI.onClearRuntimeConfig(() => {
+      console.log('[pet] CLEAR_RUNTIME_CONFIG received')
+      runtimeConfigRef.current = null
+      startupPendingRef.current = false
+      loadConfig()
+    })
+    return removeListener
+  }, [loadConfig])
+
   // 行为系统：运行时切换动画（不写 local.config.json）
   // Goes through loadConfig() to reuse the stable resize/shape flow
   useEffect(() => {
     const removeListener = window.petAPI.onSwitchAnimRuntime((animConfig: AnimConfig) => {
       console.log(`[pet] SWITCH_ANIM_RUNTIME: ${animConfig.name} loop=${animConfig.loop} framesDir=${animConfig.framesDir}`)
+      startupPendingRef.current = false // startup config received, allow RELOAD_ANIM
       runtimeConfigRef.current = animConfig
       loadConfig()
     })
     return removeListener
   }, [loadConfig])
+
+  // Notify main process that renderer is ready to receive configs
+  useEffect(() => {
+    window.petAPI.sendRendererReady()
+    console.log('[pet] PET_RENDERER_READY sent')
+  }, [])
 
   if (!config) return null
 

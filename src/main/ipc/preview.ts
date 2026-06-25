@@ -5,7 +5,7 @@ import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
 import { getControlPanel } from '../windows/controlPanel'
 import { pauseAutoBehavior } from '../behavior'
 import { getLocalConfigPath, getRuntimeLocalConfigPath, getBundledLocalConfigPath, getPublicDir, getFramesRealDir, toRendererPath, getUserGeneratedDir } from '../services/actionPaths'
-import { isUserDataProtocolUrl } from '../services/userDataProtocol'
+import { isUserDataProtocolUrl, isBundledProtocolUrl } from '../services/userDataProtocol'
 
 const LOCAL_CONFIG_PATH = getRuntimeLocalConfigPath()
 const BUNDLED_CONFIG_PATH = getBundledLocalConfigPath()
@@ -56,14 +56,21 @@ function deleteLocalConfig() {
 }
 
 /**
- * Restore demo: delete local.config.json and reload all pet windows.
+ * Restore demo: delete local.config.json, clear runtime config, reload pet windows.
  * Used by both control panel and right-click menu.
  */
 export function restoreDemo(): void {
   console.log('[preview] restoreDemo')
   deleteLocalConfig()
   setTimeout(() => {
-    notifyPetWindows()
+    // Clear runtime config on renderer, then reload from file (which falls back to demo)
+    BrowserWindow.getAllWindows().forEach((win) => {
+      try {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IPC_CHANNELS.CLEAR_RUNTIME_CONFIG)
+        }
+      } catch {}
+    })
     // Notify control panel to clear "current use" status
     const cp = getControlPanel()
     if (cp && !cp.isDestroyed()) {
@@ -84,14 +91,21 @@ export function validateStartupConfig(): void {
 
   try {
     const config = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
-    const framesDir: string = config.framesDir
+    // Normalize double-slash in framesDir (legacy bug: .//assets/... → ./assets/...)
+    let framesDir: string = config.framesDir
+    if (framesDir && framesDir.startsWith('.//')) {
+      framesDir = './' + framesDir.slice(3)
+      console.log(`[preview] startup: normalized framesDir: ${config.framesDir} → ${framesDir}`)
+      config.framesDir = framesDir
+      try { writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8') } catch {}
+    }
     if (!framesDir) {
       console.log('[preview] startup: empty framesDir, deleting local.config.json')
       deleteLocalConfig()
       return
     }
 
-    // Handle userData protocol URLs
+    // Handle protocol URLs
     let absDir: string
     if (isUserDataProtocolUrl(framesDir)) {
       // Extract actionId from furtwin-userdata://actions/generated/<actionId>
@@ -104,8 +118,18 @@ export function validateStartupConfig(): void {
         deleteLocalConfig()
         return
       }
+    } else if (isBundledProtocolUrl(framesDir)) {
+      // Extract path from furtwin-bundled://actions/idle/generated/<actionId>
+      const match = framesDir.match(/furtwin-bundled:\/\/(.+)/)
+      if (match) {
+        absDir = join(process.resourcesPath, 'assets', match[1])
+      } else {
+        console.log(`[preview] startup: invalid bundled protocol URL (${framesDir}), deleting local.config.json`)
+        deleteLocalConfig()
+        return
+      }
     } else {
-      // For bundled actions, use existing logic
+      // For relative paths (dev mode), use existing logic
       absDir = join(PUBLIC_DIR, framesDir.replace(/^\.\//, ''))
     }
 
@@ -220,7 +244,13 @@ export function setupPreview(): void {
       if (payload.fps !== undefined) config.fps = payload.fps
       writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
       console.log(`[preview] updated active playback: loop=${config.loop} fps=${config.fps}`)
-      notifyPetWindows()
+      BrowserWindow.getAllWindows().forEach((win) => {
+        try {
+          if (!win.isDestroyed()) {
+            win.webContents.send(IPC_CHANNELS.RELOAD_ANIM)
+          }
+        } catch {}
+      })
     } catch (e) {
       console.warn('[preview] update active playback failed:', e)
     }

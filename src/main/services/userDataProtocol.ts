@@ -11,7 +11,7 @@
  * - Does NOT allow writing or modifying files
  */
 
-import { protocol } from 'electron'
+import { protocol, app } from 'electron'
 import { join, resolve, relative, extname } from 'path'
 import { existsSync, readFileSync, statSync } from 'fs'
 import { getUserGeneratedDir } from './actionPaths'
@@ -165,4 +165,101 @@ export function toUserDataProtocolUrl(relativePath: string): string {
  */
 export function isUserDataProtocolUrl(url: string): boolean {
   return url.startsWith(`${PROTOCOL_NAME}://`)
+}
+
+// ─── Bundled Protocol (P2E-5B) ─────────────────────────────────────────────
+// Serves bundled action frames from process.resourcesPath/assets/ in packaged mode.
+// In packaged mode, the renderer loads pet.html from app.asar, so relative URLs
+// resolve inside the asar. Bundled action frames are in extraResources (outside asar).
+// This protocol bridges the gap.
+
+const BUNDLED_PROTOCOL_NAME = 'furtwin-bundled'
+
+/**
+ * Register the bundled protocol scheme. Must be called before app.whenReady().
+ */
+export function registerBundledProtocol(): void {
+  protocol.registerSchemesAsPrivileged([{
+    scheme: BUNDLED_PROTOCOL_NAME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    }
+  }])
+}
+
+/**
+ * Setup the bundled protocol handler. Must be called after app.whenReady().
+ * Only effective in packaged mode.
+ */
+export function setupBundledProtocolHandler(): void {
+  if (!app.isPackaged) return
+
+  const resourcesAssetsDir = join(process.resourcesPath, 'assets')
+
+  protocol.handle(BUNDLED_PROTOCOL_NAME, (request) => {
+    try {
+      const url = new URL(request.url)
+      // furtwin-bundled://actions/idle/generated/<id>/0001.png
+      // URL parsing: host = "actions", pathname = "/idle/generated/<id>/0001.png"
+      // We need to reconstruct: actions/idle/generated/<id>/0001.png
+      const host = url.host  // "actions"
+      const pathname = url.pathname.replace(/^\//, '')  // "idle/generated/<id>/0001.png"
+      const relativePath = host + (pathname ? '/' + pathname : '')
+      const filePath = join(resourcesAssetsDir, relativePath)
+
+      console.log(`[bundled-protocol] ${request.url} → ${filePath} exists=${existsSync(filePath)}`)
+
+      // Security: validate path is within resourcesAssetsDir
+      const rel = relative(resourcesAssetsDir, filePath)
+      if (rel.startsWith('..') || rel === '' || rel === '.') {
+        return new Response('Forbidden', { status: 403 })
+      }
+
+      const ext = extname(relativePath).toLowerCase()
+      if (!ALLOWED_EXTENSIONS.has(ext)) {
+        return new Response('Forbidden', { status: 403 })
+      }
+
+      if (!existsSync(filePath)) {
+        return new Response('Not Found', { status: 404 })
+      }
+
+      const stat = statSync(filePath)
+      if (!stat.isFile()) {
+        return new Response('Forbidden', { status: 403 })
+      }
+
+      const data = readFileSync(filePath)
+      return new Response(data, {
+        headers: {
+          'Content-Type': getContentType(ext),
+          'Cache-Control': 'public, max-age=3600',
+        }
+      })
+    } catch (e) {
+      console.error('[bundled-protocol] error:', e)
+      return new Response('Internal Server Error', { status: 500 })
+    }
+  })
+
+  console.log(`[bundled-protocol] registered ${BUNDLED_PROTOCOL_NAME}:// protocol`)
+}
+
+/**
+ * Convert an action ID to a furtwin-bundled:// protocol URL.
+ * Example: "1712345678" -> "furtwin-bundled://actions/idle/generated/1712345678"
+ */
+export function toBundledProtocolUrl(actionId: string): string {
+  return `${BUNDLED_PROTOCOL_NAME}://actions/idle/generated/${actionId}`
+}
+
+/**
+ * Check if a URL is a bundled protocol URL.
+ */
+export function isBundledProtocolUrl(url: string): boolean {
+  return url.startsWith(`${BUNDLED_PROTOCOL_NAME}://`)
 }

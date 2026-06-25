@@ -180,6 +180,9 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
           src={imgSrc}
           alt=""
           draggable={false}
+          onError={(e) => {
+            console.warn(`[pet] img onError: src=${imgSrc}`)
+          }}
           style={{
             position: 'absolute',
             left: 0,

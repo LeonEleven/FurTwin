@@ -1,9 +1,13 @@
 import { app, BrowserWindow, screen, ipcMain, Menu } from 'electron'
 import { join } from 'path'
-import { IPC_CHANNELS, type DragPayload } from '../../shared/types'
+import { existsSync, readFileSync } from 'fs'
+import { IPC_CHANNELS, type AnimConfig, type DragPayload } from '../../shared/types'
 import { isControlPanelVisible, showControlPanel, hideControlPanel } from './controlPanel'
 import { isAutoBehaviorActive } from '../behavior'
-import { scanAllActions } from '../services/actionRepository'
+import { scanAllActions, findActionByPath, toActionFramesDir, buildFallbackRuntimeConfig, getFallbackActionCandidate } from '../services/actionRepository'
+import { getRuntimeLocalConfigPath, toAbsoluteFramesDir } from '../services/actionPaths'
+import { isUserDataProtocolUrl, isBundledProtocolUrl } from '../services/userDataProtocol'
+import { loadAssetInfo, validateAssetInfo, computeDisplayAnchor } from '../utils/assetInfo'
 
 const isDev = !app.isPackaged
 
@@ -27,6 +31,89 @@ function scanAssets(): AssetEntry[] {
     name: entry.info.name,
     isActive: entry.isActive,
   }))
+}
+
+/**
+ * Push the startup config to the renderer after PET_RENDERER_READY.
+ * Priority: saved action > default action > first available action > demo.
+ * The renderer does NOT load any config on its own; it waits for this push.
+ */
+function pushStartupConfig(): void {
+  const configPath = getRuntimeLocalConfigPath()
+
+  // 1. Try to restore saved action from local.config.json
+  if (existsSync(configPath)) {
+    try {
+      const saved = JSON.parse(readFileSync(configPath, 'utf-8'))
+      if (saved.framesDir) {
+        const absDir = toAbsoluteFramesDir(saved.framesDir)
+        const entry = findActionByPath(absDir)
+
+        if (entry) {
+          const info = loadAssetInfo(entry.path, entry.id)
+          const error = validateAssetInfo(info)
+          if (!error && info) {
+            const framesDir = toActionFramesDir(entry)
+            const anchor = computeDisplayAnchor(info)
+            const config: AnimConfig = {
+              name: info.name,
+              label: info.name,
+              framesDir,
+              fps: info.fpsOverride ?? 12,
+              scale: 0.5,
+              displayScale: info.displayScale,
+              loop: info.loop,
+              frameCount: info.frameCount,
+              frameWidth: info.frameWidth,
+              frameHeight: info.frameHeight,
+              framePattern: `{}.${info.format}`,
+              anchorX: anchor?.anchorX,
+              anchorY: anchor?.anchorY,
+            }
+
+            if (petWindow && !petWindow.isDestroyed()) {
+              petWindow.webContents.send(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, config)
+              console.log(`[petWindow] startup: restored saved action id=${entry.id} source=${entry.source}`)
+            }
+            return
+          }
+        }
+        console.log(`[petWindow] startup: saved action not found, trying fallback`)
+      }
+    } catch (e) {
+      console.warn('[petWindow] startup: failed to read saved config:', e)
+    }
+  }
+
+  // 2. Try action repository: default > first available bundled > first available user
+  const fallback = getFallbackActionCandidate()
+  if (fallback) {
+    const config = buildFallbackRuntimeConfig(fallback)
+    if (config && petWindow && !petWindow.isDestroyed()) {
+      petWindow.webContents.send(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, config)
+      console.log(`[petWindow] startup: fallback action id=${fallback.id} source=${fallback.source} name=${config.name}`)
+      return
+    }
+  }
+
+  // 3. Last resort: demo config
+  const demoConfig: AnimConfig = {
+    name: 'idle',
+    label: 'demo',
+    framesDir: './assets/actions/idle/frames',
+    fps: 12,
+    scale: 1,
+    loop: true,
+    frameCount: 12,
+    frameWidth: 64,
+    frameHeight: 64,
+    framePattern: '{}.png',
+  }
+
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.webContents.send(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, demoConfig)
+    console.log(`[petWindow] startup: demo fallback (no actions available)`)
+  }
 }
 
 export function createPetWindow(): BrowserWindow {
@@ -68,6 +155,16 @@ export function createPetWindow(): BrowserWindow {
     petWindow?.showInactive()
     const bounds = petWindow?.getBounds()
     console.log(`[petWindow] ready-to-show: bounds=${JSON.stringify(bounds)} visible=${petWindow?.isVisible()}`)
+  })
+
+  // Startup config push: wait for renderer to be ready (handshake)
+  const onRendererReady = () => {
+    console.log('[petWindow] PET_RENDERER_READY received, pushing startup config')
+    pushStartupConfig()
+  }
+  ipcMain.once(IPC_CHANNELS.PET_RENDERER_READY, onRendererReady)
+  petWindow.on('closed', () => {
+    ipcMain.removeListener(IPC_CHANNELS.PET_RENDERER_READY, onRendererReady)
   })
 
   petWindow.on('moved', () => {

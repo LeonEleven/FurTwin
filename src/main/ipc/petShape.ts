@@ -5,12 +5,12 @@
  */
 
 import { ipcMain, BrowserWindow, Rectangle } from 'electron'
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { PNG } from 'pngjs'
 import { IPC_CHANNELS } from '../../shared/types'
-import { toAbsoluteFramesDir, getUserGeneratedDir } from '../services/actionPaths'
-import { isUserDataProtocolUrl } from '../services/userDataProtocol'
+import { toAbsoluteFramesDir, getUserGeneratedDir, getUserDataRootDir } from '../services/actionPaths'
+import { isUserDataProtocolUrl, isBundledProtocolUrl } from '../services/userDataProtocol'
 
 const ALPHA_THRESHOLD = 48
 const MERGE_TOLERANCE = 1
@@ -150,8 +150,32 @@ function resolveFrameDir(framesDir: string): string {
       return join(getUserGeneratedDir(), actionId)
     }
   }
-  // For bundled actions, use existing logic
+  // For bundled protocol URLs, resolve to resourcesPath
+  if (isBundledProtocolUrl(framesDir)) {
+    return toAbsoluteFramesDir(framesDir)
+  }
+  // For bundled actions (dev mode relative paths), use existing logic
   return toAbsoluteFramesDir(framesDir)
+}
+
+/**
+ * Get cache directory for an action.
+ * - userData actions: cache in the action directory itself
+ * - bundled actions (packaged): cache in userData/cache/shape/<actionId>/
+ */
+function getCacheDir(frameDir: string, framesDir: string): string {
+  if (isBundledProtocolUrl(framesDir)) {
+    // Bundled action: write cache to userData/cache/shape/<actionId>/
+    const match = framesDir.match(/furtwin-bundled:\/\/actions\/idle\/generated\/([^/]+)/)
+    if (match) {
+      const cacheDir = join(getUserDataRootDir(), 'cache', 'shape', match[1])
+      if (!existsSync(cacheDir)) {
+        mkdirSync(cacheDir, { recursive: true })
+      }
+      return cacheDir
+    }
+  }
+  return frameDir
 }
 
 // ─── Shape Cache ─────────────────────────────────────────
@@ -229,6 +253,7 @@ export function setupPetShape(): void {
     if (!petWin || petWin.isDestroyed()) return
 
     const frameDir = resolveFrameDir(payload.framesDir)
+    const cacheDir = getCacheDir(frameDir, payload.framesDir)
     const bounds = petWin.getBounds()
     const effectiveScale = payload.effectiveScale
     const displayW = Math.round(payload.frameWidth * effectiveScale)
@@ -240,7 +265,7 @@ export function setupPetShape(): void {
     console.log(`[shape] displaySize=${displayW}x${displayH} effectiveScale=${effectiveScale} frame=${payload.frameWidth}x${payload.frameHeight}`)
 
     // Try cache
-    const cached = tryLoadCache(frameDir, payload.frameCount, payload.frameWidth, payload.frameHeight, effectiveScale, displayW, displayH)
+    const cached = tryLoadCache(cacheDir, payload.frameCount, payload.frameWidth, payload.frameHeight, effectiveScale, displayW, displayH)
     if (cached) {
       perFrameRects = cached.map(rects => clampRects(rects, displayW, displayH))
       if (!DEBUG_FULL_RECT_SHAPE && perFrameRects.length > 0) {
@@ -278,7 +303,7 @@ export function setupPetShape(): void {
       console.log(`[shape] precomputed ${perFrameRects.length} frames, avg_rects=${avgRects}`)
 
       // Save cache
-      saveCache(frameDir, payload.frameCount, payload.frameWidth, payload.frameHeight, effectiveScale, displayW, displayH, perFrameRects)
+      saveCache(cacheDir, payload.frameCount, payload.frameWidth, payload.frameHeight, effectiveScale, displayW, displayH, perFrameRects)
 
       // Apply frame 0
       if (!DEBUG_FULL_RECT_SHAPE && perFrameRects.length > 0) {
