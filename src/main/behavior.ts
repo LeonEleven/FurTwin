@@ -14,10 +14,10 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../shared/types'
-import { loadAssetInfo, getActiveAssetId, toFramesDir, computeDisplayAnchor, type AssetInfo } from './utils/assetInfo'
+import { loadAssetInfo, getActiveAssetId, computeDisplayAnchor, type AssetInfo } from './utils/assetInfo'
 import { getControlPanel } from './windows/controlPanel'
 import { getGeneratedDir, getLocalConfigPath, getPublicDir } from './services/actionPaths'
-import { scanValidActions, type ActionEntry } from './services/actionRepository'
+import { scanValidActions, toActionFramesDir, type ActionEntry } from './services/actionRepository'
 
 // ─── Constants ──────────────────────────────────────────
 const STARTUP_DELAY = 3_000       // Wait for renderer to initialize before first action
@@ -107,6 +107,7 @@ interface ValidAsset {
   info: AssetInfo
   path: string
   dirName: string
+  source: 'bundled' | 'user'
 }
 
 function scanValidAssets(): ValidAsset[] {
@@ -115,6 +116,7 @@ function scanValidAssets(): ValidAsset[] {
     info: entry.info,
     path: entry.path,
     dirName: entry.id,
+    source: entry.source,
   }))
 }
 
@@ -122,10 +124,19 @@ function scanValidAssets(): ValidAsset[] {
 
 function assetToAnimConfig(asset: ValidAsset): AnimConfig {
   const anchor = computeDisplayAnchor(asset.info)
+  // Create a temporary ActionEntry to use toActionFramesDir
+  const tempEntry: ActionEntry = {
+    id: asset.dirName,
+    path: asset.path,
+    info: asset.info,
+    modifiedAt: 0,
+    isActive: false,
+    source: asset.source,
+  }
   return {
     name: asset.info.name,
     label: asset.info.name,
-    framesDir: toFramesDir(asset.path),
+    framesDir: toActionFramesDir(tempEntry),
     fps: asset.info.fpsOverride ?? 12,
     scale: 0.5,
     displayScale: asset.info.displayScale,
@@ -214,11 +225,20 @@ function selectRandomCandidate(): { config: AnimConfig; repeatCount: number } | 
 
   // Build AnimConfig with loop=false for auto-insert (play once per repeat)
   const anchor = computeDisplayAnchor(pick.info)
+  // Create temporary ActionEntry for toActionFramesDir
+  const tempEntry: ActionEntry = {
+    id: pick.dirName,
+    path: pick.path,
+    info: pick.info,
+    modifiedAt: 0,
+    isActive: false,
+    source: pick.source,
+  }
   return {
     config: {
       name: pick.info.name,
       label: pick.info.name,
-      framesDir: toFramesDir(pick.path),
+      framesDir: toActionFramesDir(tempEntry),
       fps: pick.info.fpsOverride ?? 12,
       scale: 0.5,
       displayScale: pick.info.displayScale,
@@ -485,11 +505,20 @@ function selectClickCandidate(): { config: AnimConfig; repeatCount: number } | n
   console.log(`[behavior] click candidate: "${pick.info.name}" repeat=${pick.info.autoPlayRepeatCount} (excluded: ${currentName ?? 'none'})`)
 
   const anchor = computeDisplayAnchor(pick.info)
+  // Create temporary ActionEntry for toActionFramesDir
+  const tempEntry: ActionEntry = {
+    id: pick.dirName,
+    path: pick.path,
+    info: pick.info,
+    modifiedAt: 0,
+    isActive: false,
+    source: pick.source,
+  }
   return {
     config: {
       name: pick.info.name,
       label: pick.info.name,
-      framesDir: toFramesDir(pick.path),
+      framesDir: toActionFramesDir(tempEntry),
       fps: pick.info.fpsOverride ?? 12,
       scale: 0.5,
       displayScale: pick.info.displayScale,

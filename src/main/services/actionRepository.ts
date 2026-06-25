@@ -181,9 +181,23 @@ export function scanUserActions(): ActionEntry[] {
  * Scan actions with frame validation.
  * Only returns actions that have valid frames in their frames directory.
  *
+ * Combines bundled actions and user actions.
+ *
  * Use case: Behavior system (auto-behavior, click interaction)
  */
 export function scanValidActions(): ActionEntry[] {
+  const bundledValid = scanBundledValidActions()
+  const userValid = scanUserValidActions()
+
+  const allActions = [...bundledValid, ...userValid]
+  allActions.sort((a, b) => b.modifiedAt - a.modifiedAt)
+  return allActions
+}
+
+/**
+ * Scan bundled actions with frame validation.
+ */
+function scanBundledValidActions(): ActionEntry[] {
   const GENERATED_DIR = getGeneratedDir()
   const PUBLIC_DIR = getPublicDir()
 
@@ -219,7 +233,47 @@ export function scanValidActions(): ActionEntry[] {
     } catch {}
   }
 
-  assets.sort((a, b) => b.modifiedAt - a.modifiedAt)
+  return assets
+}
+
+/**
+ * Scan user actions with frame validation.
+ * For user actions, frames are stored directly in the action directory.
+ */
+function scanUserValidActions(): ActionEntry[] {
+  const USER_GENERATED_DIR = getUserGeneratedDir()
+
+  if (!existsSync(USER_GENERATED_DIR)) return []
+
+  const activeId = getActiveAssetId()
+  const entries = readdirSync(USER_GENERATED_DIR, { withFileTypes: true })
+  const assets: ActionEntry[] = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const dirPath = join(USER_GENERATED_DIR, entry.name)
+    try {
+      const info = loadAssetInfo(dirPath, entry.name)
+      if (!info) continue
+
+      // For user actions, frames are in the action directory itself
+      if (!existsSync(dirPath)) continue
+      const hasFrames = readdirSync(dirPath).some(f => f.endsWith('.png') || f.endsWith('.webp'))
+      if (!hasFrames) continue
+
+      const stat = statSync(dirPath)
+      const isActive = activeId !== null && activeId === entry.name
+      assets.push({
+        id: entry.name,
+        path: dirPath,
+        info,
+        modifiedAt: stat.mtimeMs,
+        isActive,
+        source: 'user',
+      })
+    } catch {}
+  }
+
   return assets
 }
 
@@ -516,7 +570,7 @@ export function buildFallbackRuntimeConfig(fallback: ActionEntry): RuntimeAssetC
   const config: RuntimeAssetConfig = {
     name: info.name,
     label: info.name,
-    framesDir: toFramesDir(fallback.path),
+    framesDir: toActionFramesDir(fallback),
     fps: info.fpsOverride ?? 12,
     scale: 0.5,
     displayScale: info.displayScale,
