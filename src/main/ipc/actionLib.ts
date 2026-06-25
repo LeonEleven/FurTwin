@@ -1,10 +1,11 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
-import { loadAssetInfo, validateAssetInfo, toFramesDir, computeDisplayAnchor } from '../utils/assetInfo'
+import { loadAssetInfo, validateAssetInfo, computeDisplayAnchor } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { pauseAutoBehavior } from '../behavior'
 import { getLocalConfigPath } from '../services/actionPaths'
+import { findActionByPath, toActionFramesDir } from '../services/actionRepository'
 
 const LOCAL_CONFIG_PATH = getLocalConfigPath()
 
@@ -21,19 +22,26 @@ export function setupActionLib(): void {
     if (!payload?.assetPath) return
 
     const assetPath = payload.assetPath
-    const dirName = assetPath.split(/[/\\]/).pop() || 'unknown'
+
+    // Find action entry to get source (bundled or user)
+    const entry = findActionByPath(assetPath)
+    if (!entry) {
+      console.warn(`[actionLib] action not found: ${assetPath}`)
+      return
+    }
 
     // Load asset info with fallback scanning
-    const info = loadAssetInfo(assetPath, dirName)
+    const info = loadAssetInfo(assetPath, entry.id)
 
     // Validate before writing
     const error = validateAssetInfo(info)
     if (error) {
-      console.warn(`[actionLib] switch failed: ${error} id=${dirName}`)
+      console.warn(`[actionLib] switch failed: ${error} id=${entry.id}`)
       return
     }
 
-    const framesDir = toFramesDir(assetPath)
+    // Use source-aware framesDir
+    const framesDir = toActionFramesDir(entry)
     const anchor = computeDisplayAnchor(info!)
 
     const config: AnimConfig = {
@@ -52,7 +60,7 @@ export function setupActionLib(): void {
       anchorY: anchor?.anchorY,
     }
 
-    console.log(`[actionLib] switch asset id=${dirName} frames=${config.frameCount} display=${config.frameWidth}x${config.frameHeight} scale=${config.displayScale} anchor=(${anchor?.anchorX?.toFixed(1) ?? '-'},${anchor?.anchorY?.toFixed(1) ?? '-'}) src=${info!.sourceWidth ?? '-'}x${info!.sourceHeight ?? '-'} trim=${JSON.stringify(info!.trimBox ?? '-')}`)
+    console.log(`[actionLib] switch asset id=${entry.id} source=${entry.source} frames=${config.frameCount} display=${config.frameWidth}x${config.frameHeight} scale=${config.displayScale} framesDir=${config.framesDir} anchor=(${anchor?.anchorX?.toFixed(1) ?? '-'},${anchor?.anchorY?.toFixed(1) ?? '-'}) src=${info!.sourceWidth ?? '-'}x${info!.sourceHeight ?? '-'} trim=${JSON.stringify(info!.trimBox ?? '-')}`)
 
     try {
       // Preserve existing behavior params when writing action config

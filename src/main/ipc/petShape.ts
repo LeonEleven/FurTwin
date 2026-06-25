@@ -9,7 +9,8 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { PNG } from 'pngjs'
 import { IPC_CHANNELS } from '../../shared/types'
-import { toAbsoluteFramesDir } from '../services/actionPaths'
+import { toAbsoluteFramesDir, getUserGeneratedDir } from '../services/actionPaths'
+import { isUserDataProtocolUrl } from '../services/userDataProtocol'
 
 const ALPHA_THRESHOLD = 48
 const MERGE_TOLERANCE = 1
@@ -134,6 +135,22 @@ function computeFrameShapeDisplay(filePath: string, displayW: number, displayH: 
 }
 
 function resolveFrameDir(framesDir: string): string {
+  // Handle userData protocol URLs
+  if (isUserDataProtocolUrl(framesDir)) {
+    // Extract actionId from furtwin-userdata://actions/generated/<actionId>
+    const match = framesDir.match(/furtwin-userdata:\/\/actions\/generated\/([^/]+)$/)
+    if (match) {
+      const actionId = match[1]
+      return join(getUserGeneratedDir(), actionId)
+    }
+    // If it has subpath (like /0.png), extract actionId from the path
+    const pathMatch = framesDir.match(/furtwin-userdata:\/\/actions\/generated\/([^/]+)\//)
+    if (pathMatch) {
+      const actionId = pathMatch[1]
+      return join(getUserGeneratedDir(), actionId)
+    }
+  }
+  // For bundled actions, use existing logic
   return toAbsoluteFramesDir(framesDir)
 }
 

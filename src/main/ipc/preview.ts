@@ -4,7 +4,8 @@ import { join } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
 import { getControlPanel } from '../windows/controlPanel'
 import { pauseAutoBehavior } from '../behavior'
-import { getLocalConfigPath, getPublicDir, getFramesRealDir, toRendererPath } from '../services/actionPaths'
+import { getLocalConfigPath, getPublicDir, getFramesRealDir, toRendererPath, getUserGeneratedDir } from '../services/actionPaths'
+import { isUserDataProtocolUrl } from '../services/userDataProtocol'
 
 const LOCAL_CONFIG_PATH = getLocalConfigPath()
 const PUBLIC_DIR = getPublicDir()
@@ -89,7 +90,24 @@ export function validateStartupConfig(): void {
       return
     }
 
-    const absDir = join(PUBLIC_DIR, framesDir.replace(/^\.\//, ''))
+    // Handle userData protocol URLs
+    let absDir: string
+    if (isUserDataProtocolUrl(framesDir)) {
+      // Extract actionId from furtwin-userdata://actions/generated/<actionId>
+      const match = framesDir.match(/furtwin-userdata:\/\/actions\/generated\/([^/]+)/)
+      if (match) {
+        const actionId = match[1]
+        absDir = join(getUserGeneratedDir(), actionId)
+      } else {
+        console.log(`[preview] startup: invalid userData protocol URL (${framesDir}), deleting local.config.json`)
+        deleteLocalConfig()
+        return
+      }
+    } else {
+      // For bundled actions, use existing logic
+      absDir = join(PUBLIC_DIR, framesDir.replace(/^\.\//, ''))
+    }
+
     if (!existsSync(absDir)) {
       console.log(`[preview] startup: frames dir missing (${absDir}), deleting local.config.json`)
       deleteLocalConfig()

@@ -84,24 +84,32 @@ export function registerUserDataProtocol(): void {
 export function setupUserDataProtocolHandler(): void {
   protocol.handle(PROTOCOL_NAME, (request) => {
     try {
-      // Parse the URL: furtwin-userdata://actions/generated/123456/0.png
-      const url = request.url
-      const pathPart = url.replace(`${PROTOCOL_NAME}://`, '')
+      // Parse the URL properly to handle query parameters
+      // Example: furtwin-userdata://actions/generated/123456/0.png?v=3&r=0
+      const url = new URL(request.url)
 
-      // Get the userData/actions/generated directory
+      // For custom protocol, host is the first part after //
+      // furtwin-userdata://actions/generated/test_action_001/0001.png
+      // → host=actions, pathname=/generated/test_action_001/0001.png
+      // getUserGeneratedDir() already returns .../actions/generated
+      // So we need to strip the leading /generated/ from pathname
       const userGeneratedDir = getUserGeneratedDir()
 
+      // pathname is /generated/test_action_001/0001.png
+      // Remove leading /generated/ to get test_action_001/0001.png
+      const relativePath = url.pathname.replace(/^\/generated\//, '')
+
       // Construct the full file path
-      const filePath = join(userGeneratedDir, pathPart)
+      const filePath = join(userGeneratedDir, relativePath)
 
       // Security: Validate that the path is within the allowed directory
       if (!isPathWithinAllowedDir(filePath, userGeneratedDir)) {
-        console.warn(`[userData-protocol] rejected: path outside allowed dir: ${url}`)
+        console.warn(`[userData-protocol] rejected: path outside allowed dir: ${request.url}`)
         return new Response('Forbidden', { status: 403 })
       }
 
-      // Security: Validate file extension
-      const ext = extname(filePath).toLowerCase()
+      // Security: Validate file extension (using relativePath, not full URL)
+      const ext = extname(relativePath).toLowerCase()
       if (!ALLOWED_EXTENSIONS.has(ext)) {
         console.warn(`[userData-protocol] rejected: unsupported extension: ${ext}`)
         return new Response('Forbidden', { status: 403 })

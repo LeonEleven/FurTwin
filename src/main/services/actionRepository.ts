@@ -62,6 +62,18 @@ export function toActionFramesDir(entry: ActionEntry): string {
   return toFramesDir(entry.path)
 }
 
+/**
+ * Find an action entry by its absolute path.
+ * Searches both bundled and user actions.
+ *
+ * @param path - Absolute path to the action directory
+ * @returns ActionEntry or null if not found
+ */
+export function findActionByPath(path: string): ActionEntry | null {
+  const allActions = scanAllActions()
+  return allActions.find(a => a.path === path) || null
+}
+
 // ─── Read-Only Repository ───────────────────────────────
 
 /**
@@ -159,6 +171,9 @@ export function scanUserActions(): ActionEntry[] {
   }
 
   assets.sort((a, b) => b.modifiedAt - a.modifiedAt)
+  if (assets.length > 0) {
+    console.log(`[actionRepository] user actions: ${assets.length} found`)
+  }
   return assets
 }
 
