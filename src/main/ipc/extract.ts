@@ -104,8 +104,8 @@ export function setupExtractFrames(): void {
     const sender = BrowserWindow.fromWebContents(event.sender)
     if (!sender) return
 
-    // Use outputTarget from options, default to 'bundled'
-    const outputTarget = options.outputTarget || 'bundled'
+    // Use outputTarget from options, default to 'user-temp' (userData)
+    const outputTarget = options.outputTarget || 'user-temp'
     const outputResult = generateOutputDir(outputTarget)
     const outputDir = outputResult.dir
     console.log(`[extract] output_dir: ${outputDir} (target: ${outputResult.target})`)

@@ -11,7 +11,7 @@ import { join, basename } from 'path'
 import JSZip from 'jszip'
 import { IPC_CHANNELS } from '../../shared/types'
 import { loadAssetInfo } from '../utils/assetInfo'
-import { getGeneratedDir, getAssetMetadataPath } from '../services/actionPaths'
+import { getGeneratedDir, getAssetMetadataPath, createGeneratedActionId, getUserGeneratedActionDir } from '../services/actionPaths'
 
 const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
@@ -116,9 +116,9 @@ export function setupAssetPackage(): void {
       // Force isDefault to false on import
       meta.isDefault = false
 
-      // Create new asset directory
-      const newId = String(Date.now())
-      const newDir = join(GENERATED_DIR, newId)
+      // Create new asset directory in userData
+      const newId = createGeneratedActionId()
+      const newDir = getUserGeneratedActionDir(newId)
       mkdirSync(newDir, { recursive: true })
 
       // Write metadata
