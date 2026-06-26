@@ -30,3 +30,6 @@ test_colorkey_*.png
 
 # FFmpeg 本地二进制（packaged build 依赖，不提交）
 resources/bin/*.exe
+
+# 提取脚本 bundle（build 产物，不提交）
+resources/scripts/*.bundle.*

@@ -65,14 +65,14 @@ function resolveNodeExecutable(): string {
 /**
  * Get the path to the extract script.
  * - Dev: project root/scripts/extract-transparent-frames.mjs
- * - Packaged: process.resourcesPath/scripts/extract-transparent-frames.mjs
+ * - Packaged: process.resourcesPath/scripts/extract-transparent-frames.bundle.cjs
  */
 function getScriptPath(): string {
   let scriptPath: string
   if (isDev) {
     scriptPath = join(process.cwd(), 'scripts', 'extract-transparent-frames.mjs')
   } else {
-    scriptPath = join(process.resourcesPath, 'scripts', 'extract-transparent-frames.mjs')
+    scriptPath = join(process.resourcesPath, 'scripts', 'extract-transparent-frames.bundle.cjs')
   }
 
   if (!existsSync(scriptPath)) {
