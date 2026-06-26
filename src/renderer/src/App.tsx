@@ -238,6 +238,7 @@ export function App() {
     { value: 'sleep', label: '睡觉', color: '#7c4dff' },
     { value: 'eat', label: '进食', color: '#e91e63' },
     { value: 'clean', label: '清洁', color: '#00bcd4' },
+    { value: 'interact', label: '互动', color: '#2196f3' },
     { value: 'custom', label: '自定义', color: '#9e9e9e' },
   ]
 
@@ -507,10 +508,10 @@ export function App() {
       <div style={{ marginTop: 12, padding: '8px 12px', backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d0e3f7', fontSize: 13 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}
-            title="开启后，桌宠会在待机动作之间自动插播动作。关闭后只保持用户手动选择的动作。">
+            title="开启后，桌宠会在待机动作之间自动播放已勾选的动作。关闭后只保持用户手动选择的动作。">
             <input type="checkbox" checked={autoBehaviorEnabled} onChange={handleToggleAutoBehavior} style={{ cursor: 'pointer' }} />
             <span style={{ fontWeight: 600 }}>自动行为</span>
-            <span style={{ color: '#888', fontSize: 11 }}>({autoBehaviorEnabled ? '开启' : '关闭'} — 自动插播随机动作)</span>
+            <span style={{ color: '#888', fontSize: 11 }}>({autoBehaviorEnabled ? '开启' : '关闭'} — 自动播放已勾选的动作)</span>
           </label>
           {autoBehaviorEnabled && autoPlayingName && (
             <span style={{ fontSize: 11, color: '#4a90d9', fontWeight: 600 }}>正在播放：{autoPlayingName}</span>
@@ -524,27 +525,27 @@ export function App() {
         {showBehaviorParams && (
           <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, fontSize: 12 }}>
             <div>
-              <label style={{ display: 'block', color: '#666', marginBottom: 2 }} title="启动或开启自动行为后，等待多少秒才开始第一次自动插播。">首次等待(秒)</label>
+              <label style={{ display: 'block', color: '#666', marginBottom: 2 }} title="启动或开启自动行为后，等待多少秒才开始第一次自动播放。">首次等待(秒)</label>
               <input type="number" min="0" value={behaviorParams.firstDelaySec}
                 onChange={(e) => handleBehaviorParamChange('firstDelaySec', e.target.value)}
                 onBlur={handleSaveBehaviorParams}
-                title="启动或开启自动行为后，等待多少秒才开始第一次自动插播。"
+                title="启动或开启自动行为后，等待多少秒才开始第一次自动播放。"
                 style={{ width: '100%', padding: '2px 4px', border: '1px solid #ccc', borderRadius: 3 }} />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#666', marginBottom: 2 }} title="两次自动插播之间的最短等待时间。">最小间隔(秒)</label>
+              <label style={{ display: 'block', color: '#666', marginBottom: 2 }} title="两次自动播放之间的最短等待时间。">最小间隔(秒)</label>
               <input type="number" min="0" value={behaviorParams.minIntervalSec}
                 onChange={(e) => handleBehaviorParamChange('minIntervalSec', e.target.value)}
                 onBlur={handleSaveBehaviorParams}
-                title="两次自动插播之间的最短等待时间。"
+                title="两次自动播放之间的最短等待时间。"
                 style={{ width: '100%', padding: '2px 4px', border: '1px solid #ccc', borderRadius: 3 }} />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#666', marginBottom: 2 }} title="两次自动插播之间的最长等待时间。系统会在最小和最大间隔之间随机选择。">最大间隔(秒)</label>
+              <label style={{ display: 'block', color: '#666', marginBottom: 2 }} title="两次自动播放之间的最长等待时间。系统会在最小和最大间隔之间随机选择。">最大间隔(秒)</label>
               <input type="number" min="0" value={behaviorParams.maxIntervalSec}
                 onChange={(e) => handleBehaviorParamChange('maxIntervalSec', e.target.value)}
                 onBlur={handleSaveBehaviorParams}
-                title="两次自动插播之间的最长等待时间。系统会在最小和最大间隔之间随机选择。"
+                title="两次自动播放之间的最长等待时间。系统会在最小和最大间隔之间随机选择。"
                 style={{ width: '100%', padding: '2px 4px', border: '1px solid #ccc', borderRadius: 3 }} />
             </div>
             <div>
@@ -559,7 +560,7 @@ export function App() {
         )}
         {autoBehaviorEnabled && !hasRandomCandidates && (
           <p style={{ margin: '6px 0 0', fontSize: 11, color: '#e65100' }}>
-            当前没有可自动插播动作。请至少设置一个非待机类型，并勾选「自动插播」。
+            当前没有可自动播放的动作。请至少设置一个非待机类型，并勾选「参与自动行为」。
           </p>
         )}
         {behaviorParams.minIntervalSec < 5 && (
@@ -589,7 +590,7 @@ export function App() {
               const date = new Date(asset.modifiedAt)
               const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
               const isRenaming = renamingId === asset.id
-              const typeInfo = ACTION_TYPES.find(t => t.value === asset.actionType) || ACTION_TYPES[4]
+              const typeInfo = ACTION_TYPES.find(t => t.value === asset.actionType) || ACTION_TYPES.find(t => t.value === 'custom')!
 
               const btnStyle = (bg: string): React.CSSProperties => ({
                 padding: '3px 10px', fontSize: 11, cursor: 'pointer',
@@ -636,7 +637,7 @@ export function App() {
                     )}
                   </div>
 
-                  {/* 第二行：缩放 / 手动循环 / 点击触发 / 自动插播 / 触发轮数 */}
+                  {/* 第二行：缩放 / 手动循环 / 点击触发 / 参与自动行为 / 触发轮数 */}
                   {!isRenaming && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
                       <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}
@@ -662,15 +663,15 @@ export function App() {
                         点击触发
                       </label>
                       <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}
-                        title="开启自动行为时，此动作可作为随机插播候选。待机动作通常不会被自动插播。">
+                        title="开启自动行为时，此动作可参与随机播放。待机动作通常不参与。">
                         <input type="checkbox" checked={asset.includeInRandom}
                           onChange={() => handleToggleRandom(asset)}
                           style={{ cursor: 'pointer' }} />
-                        自动插播
+                        参与自动行为
                       </label>
                       {(asset.includeInRandom || asset.triggerOnClick) && (
                         <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}
-                          title="点击触发或自动插播时，此动作播放几轮后回到待机动作。不影响手动循环。">
+                          title="点击触发或自动行为触发时，此动作播放几轮后回到待机动作。不影响手动循环。">
                             <span>触发轮数</span>
                             <input type="number" min="1" max="10" value={asset.autoPlayRepeatCount}
                               onChange={(e) => handleChangeRepeatCount(asset, e.target.value)}

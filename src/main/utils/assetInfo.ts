@@ -10,7 +10,7 @@ import { getGeneratedDir, getRuntimeLocalConfigPath, getBundledLocalConfigPath, 
 
 const METADATA_FILE = 'asset-metadata.json'
 
-export type ActionType = 'idle' | 'play' | 'sleep' | 'eat' | 'clean' | 'custom'
+export type ActionType = 'idle' | 'play' | 'sleep' | 'eat' | 'clean' | 'interact' | 'custom'
 
 export interface AssetInfo {
   id: string
@@ -112,7 +112,7 @@ export function loadAssetInfo(dirPath: string, dirName: string): AssetInfo | nul
   if (!Number.isFinite(meta.displayScale) || meta.displayScale <= 0) { meta.displayScale = 0.5; needsRepair = true }
   if (!Number.isFinite(meta.fps) || meta.fps <= 0) { meta.fps = 12; needsRepair = true }
   // Action resource v1 fields
-  const VALID_ACTION_TYPES = ['idle', 'play', 'sleep', 'eat', 'clean', 'custom']
+  const VALID_ACTION_TYPES = ['idle', 'play', 'sleep', 'eat', 'clean', 'interact', 'custom']
   if (meta.actionType === 'greet') { meta.actionType = 'custom'; needsRepair = true } // migrate greet → custom
   if (!VALID_ACTION_TYPES.includes(meta.actionType)) { meta.actionType = 'custom'; needsRepair = true }
   if (typeof meta.loop !== 'boolean') { meta.loop = true; needsRepair = true }

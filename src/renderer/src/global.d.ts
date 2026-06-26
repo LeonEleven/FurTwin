@@ -42,7 +42,7 @@ interface PetShapePayload {
   effectiveScale: number
 }
 
-type ActionType = 'idle' | 'play' | 'sleep' | 'eat' | 'clean' | 'custom'
+type ActionType = 'idle' | 'play' | 'sleep' | 'eat' | 'clean' | 'interact' | 'custom'
 
 interface GeneratedAssetInfo {
   id: string
