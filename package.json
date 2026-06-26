@@ -8,6 +8,7 @@
     "dev:win": "chcp 65001 >nul && electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "predist": "node scripts/check-ffmpeg-assets.mjs",
     "dist": "electron-vite build && electron-builder --win --config"
   },
   "dependencies": {

@@ -27,3 +27,6 @@ test_colorkey_*.png
 
 # 运行时 shape 缓存
 **/shape-cache.json
+
+# FFmpeg 本地二进制（packaged build 依赖，不提交）
+resources/bin/*.exe
