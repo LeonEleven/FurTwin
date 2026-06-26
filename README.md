@@ -1,193 +1,128 @@
 # FurTwin
 
-桌面宠物软件 — 让你的宠物照片变成桌面宠物动画。
+FurTwin 是一个 Windows 桌宠应用，支持从绿幕视频提取透明动作帧，并管理桌面宠物动作库。
 
-## 当前阶段
+## 功能概览
 
-**v0.1 Demo** — 控制面板 + FFmpeg 提取 + per-frame 桌宠 shape
+- 透明窗口桌面宠物，支持拖动、右键菜单
+- 动作库管理：提取、导入、导出、重命名、删除、设为默认
+- 从绿幕视频提取透明 PNG 序列帧生成动作
+- 自动行为：按间隔随机插播动作
+- 点击交互：点击宠物触发指定动作
+- 对齐微调：多动作切换时保持角色位置一致
+- 循环播放、缩放、帧率调节
 
-已验证核心链路：
-- 透明窗口 + 序列帧动画播放 + 拖动 + 右键菜单
-- 控制面板 FFmpeg 绿幕视频提取（扣绿、trim-alpha、clean-components、水印遮罩）
-- 应用到桌宠预览（generated 唯一输出目录）
-- 恢复 Demo 预览
-- per-frame scanline shape（解决失焦灰白线问题）
+## 安装
 
-已知问题：
-- 拖动过程中 per-frame shape 暂停，动画继续播放时可能显示不全
+1. 下载 `furtwin-0.1.0-setup.exe`
+2. 运行安装程序（安装到当前用户目录，无需管理员权限）
+3. 从桌面快捷方式或开始菜单启动 **FurTwin**
+
+> 当前仅验证 Windows 系统。
+
+## 快速开始
+
+1. 启动后会显示内置桌宠动作；如果资源异常，才会显示彩色圆形 Demo 作为兜底
+2. 右键桌宠 → **显示控制面板**
+3. 在控制面板中选择绿幕视频 → 点击 **开始提取**
+4. 提取完成后点击 **应用**，桌宠变成你的宠物动画
+
+## 动作库
+
+### 内置动作
+
+安装包自带一组示例动作，首次启动即可使用。
+
+### 用户动作
+
+通过以下方式获取用户动作：
+
+- **视频提取**：从绿幕视频自动提取透明序列帧
+- **导入动作包**：导入 `.zip` 格式的动作包
+
+### 动作管理
+
+每个动作支持：
+
+- **应用**：设为当前桌宠动画
+- **打开目录**：查看动作文件
+- **重命名**：修改动作名称
+- **导出**：打包为 `.zip` 分享给他人
+- **删除**：移除动作（当前动作删除后自动切换到其他可用动作）
+- **设为默认**：启动时优先使用
+- **参与自动行为**：勾选后可被自动行为系统随机选中
+- **点击触发**：勾选后点击桌宠会播放该动作
+- **循环 / 缩放 / 帧率**：调整播放参数
+- **对齐微调**：调整动作的水平/垂直偏移，保持角色位置一致
+
+## 视频提取
+
+安装版已内置 FFmpeg，普通用户无需单独安装。
+
+### 基本用法
+
+1. 控制面板中点击 **选择视频**
+2. 选择绿幕视频文件（支持 mp4、mov、avi、mkv）
+3. 调整参数（一般默认即可）
+4. 点击 **开始提取**
+5. 提取完成后在动作库中找到新动作并应用
+
+### 参数说明
+
+| 参数 | 说明 |
+|------|------|
+| FPS | 提取帧率，越高帧数越多，文件越大 |
+| 相似度 | 颜色相似度阈值，影响扣绿范围 |
+| 混合 | 边缘混合强度 |
+| 去溢色 | 绿色溢色去除强度 |
+| 裁剪透明 | 自动裁剪透明边缘（推荐开启） |
+| 水印遮罩 | 提供水印区域透明遮罩预设 |
+
+### 水印处理说明
+
+`水印遮罩` 功能是将水印所在区域设为透明，**不是自动去水印**。
+
+- 如果水印未与宠物主体重叠，可使用 `doubao-free` 预设
+- 如果水印覆盖宠物主体，建议重新生成无水印素材
+- 优先使用无水印素材来源
+
+### 循环播放提示
+
+首帧和尾帧是否适合循环播放，取决于输入视频本身。如果播放时有明显跳帧，建议调整视频剪辑或提取参数。
+
+## 用户数据保存位置
+
+| 数据 | 路径 |
+|------|------|
+| 配置文件 | `%APPDATA%\furtwin\local.config.json` |
+| 用户动作 | `%APPDATA%\furtwin\actions\generated\` |
+| 缓存 | `%APPDATA%\furtwin\cache\` |
+
+> 卸载程序通常不会自动删除这些用户数据。如需完全清理，手动删除 `%APPDATA%\furtwin` 目录。
+
+## 已知限制
+
+- 仅验证 Windows 系统
+- 安装包较大（~536MB），主要因为内置 FFmpeg
+- 视频提取参数需要根据素材自行调试
+- 水印遮罩是区域透明遮罩，不是 AI 去水印
+- 目前仅支持单个宠物窗口
+- 控制面板输入框焦点问题暂不影响主流程
+- 拖动桌宠时动画形状可能暂时显示不全
+
+## 问题反馈
+
+反馈时请提供：
+
+1. 操作步骤（如何复现问题）
+2. 截图或录屏
+3. 控制面板中的错误日志
+4. 使用环境：安装版 / win-unpacked / dev
+5. `%APPDATA%\furtwin\actions\generated\` 下是否有相关动作目录
 
 ## 技术栈
 
 - Electron 35
 - React 19 + TypeScript
 - Vite 6 + electron-vite
-
-## 如何运行
-
-```bash
-# 安装依赖
-npm install
-
-# 开发模式
-npm run dev
-
-# 构建
-npm run build
-```
-
-## 当前已实现功能
-
-- 透明、无边框、置顶的桌宠展示窗口（不在任务栏显示，无阴影，无菜单栏）
-- 序列帧动画循环播放（requestAnimationFrame + 时间戳控制帧率）
-- 动作配置驱动：每个动作独立目录，含 config.json + frames/
-- Pointer Events + setPointerCapture 实现稳定拖动
-- 右键菜单（重新加载动画 / 退出应用）
-- 窗口尺寸自动匹配动画帧尺寸（frameWidth × scale）
-- per-frame scanline shape（窗口形状精确贴合每帧 alpha 边界，解决失焦灰白线）
-- 控制面板 FFmpeg 绿幕视频提取（扣绿、trim-alpha、clean-components、水印遮罩）
-- 控制面板「应用到桌宠预览」（generated 唯一输出目录，不覆盖当前帧）
-- 控制面板「恢复 Demo 预览」
-- 命令行 FFmpeg 扣绿脚本（含水印遮罩、透明边界裁剪、组件清理）
-- 安全配置：contextIsolation: true、nodeIntegration: false、preload 桥接
-- 12 帧彩色圆形占位动画（用于验证播放链路）
-
-## 当前暂不支持的功能
-
-- 宠物创建流程 / 动作管理面板
-- 多动作切换
-- 多宠物同时展示
-- .furtwin 宠物包导入/导出
-- 点击穿透（透明区域不阻挡其他程序）
-- 像素级 alpha 命中测试
-- Doubao / Seedance API 集成
-- CorridorKey 集成
-- 跨平台完整兼容
-- 自动更新 / 安装包构建
-
-## 已知问题
-
-- 拖动过程中 per-frame shape 暂停，动画继续播放时可能显示不全
-
-## 下一阶段计划
-
-1. **视频导入与处理** — FFmpeg 集成，绿幕视频导入，色度键控扣绿幕，序列帧提取与 WebP 转换
-2. **后台控制面板** — 宠物列表管理，动作管理，动作预览
-3. **宠物包导入/导出** — .furtwin 格式（zip），manifest.json + 序列帧资源
-
-## AI 视频生成
-
-当前 v0.1 **暂不接入** Doubao/Seedance API。AI 视频生成仍然是用户在外部工具（如豆包网页端）手动完成。
-
-FurTwin 当前只负责：
-- 播放已有的透明序列帧；
-- 后续提供本地 FFmpeg 扣绿和序列帧化处理链路。
-
-AI 视频生成的 prompt 规范和推荐动作已记录在 [`docs/ai-generation-prompt.md`](docs/ai-generation-prompt.md)，供后续产品化时参考。
-
-## FFmpeg 扣绿脚本
-
-项目提供了 FFmpeg 绿幕扣除脚本，可将绿幕视频转为透明 PNG/WebP 序列帧：
-
-```bash
-# 基本用法
-node scripts/extract-transparent-frames.mjs --input cat.mp4
-
-# 如使用豆包免费版等带水印素材，且水印未与宠物主体重叠，
-# 可尝试角落遮罩（不改变画布尺寸）
-node scripts/extract-transparent-frames.mjs --input cat.mp4 --mask-preset doubao-free
-
-# 手动指定遮罩区域
-node scripts/extract-transparent-frames.mjs --input cat.mp4 --mask-region "0:0:220:90,1020:630:260:90"
-```
-
-脚本支持扣绿参数调节、水印区域透明遮罩、可选画面裁剪、输出格式选择等。详见 [`docs/ffmpeg-keying.md`](docs/ffmpeg-keying.md)。
-
-**水印处理说明**：`--mask-preset doubao-free` 是把水印角落区域设为透明，不是自动去水印。若水印覆盖宠物主体，建议重新生成无水印素材或调整生成构图。优先使用无水印素材来源。
-
-## 项目结构
-
-```
-src/
-├── main/                         # Electron 主进程
-│   ├── index.ts                  # 入口
-│   └── windows/petWindow.ts      # 桌宠窗口管理
-├── preload/index.ts              # 安全桥接（contextBridge）
-├── renderer/
-│   ├── pet.html                  # 桌宠窗口 HTML
-│   ├── index.html                # 控制面板 HTML（占位）
-│   ├── public/assets/actions/    # 动作资源目录
-│   │   └── idle/                 # 示例动作：待机
-│   │       ├── config.json       # 动作配置
-│   │       └── frames/           # 序列帧文件
-│   └── src/
-│       ├── pet.tsx               # 桌宠窗口入口（加载动作配置）
-│       ├── App.tsx               # 控制面板（占位）
-│       ├── components/PetSprite.tsx  # 精灵组件
-│       └── hooks/useAnimPlayer.ts    # 动画播放 hook
-└── shared/types.ts               # 共享类型定义
-```
-
-## 替换为真实宠物序列帧
-
-只需两步，无需修改代码：
-
-### 1. 放入帧文件
-
-将透明 PNG 或 WebP 序列帧放入动作目录的 `frames/` 文件夹：
-
-```
-src/renderer/public/assets/actions/idle/frames/
-├── 0001.webp
-├── 0002.webp
-├── 0003.webp
-└── ...
-```
-
-帧文件命名格式需与 config.json 中的 `framePattern` 一致（默认 `{四位序号}.png`）。
-
-### 2. 修改 config.json
-
-编辑 `src/renderer/public/assets/actions/idle/config.json`：
-
-```json
-{
-  "name": "idle",
-  "label": "待机",
-  "framesDir": "./assets/actions/idle/frames",
-  "fps": 12,
-  "scale": 0.5,
-  "loop": true,
-  "frameCount": 48,
-  "frameWidth": 512,
-  "frameHeight": 512,
-  "framePattern": "{}.webp"
-}
-```
-
-| 字段 | 说明 |
-|------|------|
-| `name` | 动作标识 |
-| `label` | 显示名称 |
-| `framesDir` | 帧文件目录（相对于 renderer 根） |
-| `fps` | 帧率 |
-| `scale` | 缩放比例（1.0 = 原始尺寸） |
-| `loop` | 是否循环 |
-| `frameCount` | 总帧数 |
-| `frameWidth` | 单帧宽度（像素） |
-| `frameHeight` | 单帧高度（像素） |
-| `framePattern` | 帧文件名模板，`{}` 替换为序号 |
-
-窗口尺寸会自动调整为 `frameWidth × scale` × `frameHeight × scale`。
-
-### 添加新动作
-
-在 `assets/actions/` 下创建新目录，例如 `walk/`：
-
-```
-assets/actions/walk/
-├── config.json
-└── frames/
-    └── ...
-```
-
-当前版本只加载默认动作（idle），多动作切换将在后续版本中支持。
+- FFmpeg（视频处理）
