@@ -265,7 +265,7 @@ export function setupExtractFrames(): void {
           actionType: 'custom',
           loop: true,
           isDefault: false,
-          includeInRandom: true,
+          includeInRandom: false,
           interruptible: true,
           fpsOverride: null,
           autoPlayRepeatCount: 1,
