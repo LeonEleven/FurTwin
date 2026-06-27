@@ -59,6 +59,7 @@ export function App() {
   const [showBehaviorParams, setShowBehaviorParams] = useState(false)
   const [autoPlayingName, setAutoPlayingName] = useState<string | null>(null)
   const [expandingAnchorId, setExpandingAnchorId] = useState<string | null>(null)
+  const [typeFilter, setTypeFilter] = useState<string>('all')
 
   const logRef = useRef<HTMLDivElement>(null)
 
@@ -387,6 +388,13 @@ export function App() {
   // Check if there are any valid random candidates
   const hasRandomCandidates = assets.some(a => a.includeInRandom && a.actionType !== 'idle')
 
+  // Type filter: counts and filtered list
+  const typeCounts = ACTION_TYPES.reduce<Record<string, number>>((acc, t) => {
+    acc[t.value] = assets.filter(a => a.actionType === t.value).length
+    return acc
+  }, {})
+  const filteredAssets = typeFilter === 'all' ? assets : assets.filter(a => a.actionType === typeFilter)
+
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '6px 8px', border: '1px solid #ccc',
     borderRadius: 4, fontSize: 13, fontFamily: 'inherit',
@@ -585,8 +593,31 @@ export function App() {
           </p>
         )}
         {assets.length > 0 && (<>
+          {/* 类型筛选 tabs */}
+          <div style={{ display: 'flex', gap: 2, marginBottom: 8, flexWrap: 'wrap' }}>
+            {[{ value: 'all', label: '全部' }, ...ACTION_TYPES.map(t => ({ value: t.value, label: t.label }))].map(tab => {
+              const isActive = typeFilter === tab.value
+              const count = tab.value === 'all' ? assets.length : (typeCounts[tab.value] || 0)
+              return (
+                <button key={tab.value} onClick={() => setTypeFilter(tab.value)}
+                  style={{
+                    padding: '3px 8px', fontSize: 11, cursor: 'pointer', border: 'none', borderRadius: 3,
+                    backgroundColor: isActive ? '#4a90d9' : '#e0e0e0',
+                    color: isActive ? '#fff' : '#666',
+                    fontWeight: isActive ? 600 : 400,
+                  }}>
+                  {tab.label} {count}
+                </button>
+              )
+            })}
+          </div>
           <div style={{ maxHeight: 400, overflow: 'auto' }}>
-            {assets.map((asset) => {
+            {filteredAssets.length === 0 && (
+              <p style={{ margin: 0, color: '#888', fontSize: 12, padding: '12px 0', textAlign: 'center' }}>
+                当前类型下暂无动作。
+              </p>
+            )}
+            {filteredAssets.map((asset) => {
               const date = new Date(asset.modifiedAt)
               const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
               const isRenaming = renamingId === asset.id
