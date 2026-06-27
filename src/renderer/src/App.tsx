@@ -604,114 +604,123 @@ export function App() {
                   backgroundColor: asset.isActive ? '#e8f5e9' : '#fff',
                   borderRadius: 4,
                 }}>
-                  {/* 第一行：名称 + 类型 + 状态标记 + 帧信息 */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+                  {/* 第一行：名称/重命名 + 类型下拉 + 状态标记 */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    {isRenaming ? (
+                      <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmRename(asset); if (e.key === 'Escape') handleCancelRename() }}
+                        autoFocus style={{ padding: '2px 6px', fontSize: 13, fontWeight: 600, border: '1px solid #4a90d9', borderRadius: 3, width: 140 }} />
+                    ) : (
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{asset.name}</span>
+                    )}
+                    <select
+                      value={asset.actionType}
+                      onChange={(e) => handleChangeActionType(asset, e.target.value)}
+                      title="设置动作类型，用于动作库整理和后续行为逻辑。"
+                      style={{ fontSize: 10, padding: '1px 4px', borderRadius: 3, border: '1px solid #ccc', backgroundColor: typeInfo.color, color: '#fff', cursor: 'pointer', outline: 'none' }}
+                    >
+                      {ACTION_TYPES.map(t => (
+                        <option key={t.value} value={t.value} style={{ backgroundColor: '#fff', color: '#333' }}>{t.label}</option>
+                      ))}
+                    </select>
+                    {asset.isActive && <span style={{ fontSize: 10, color: '#4caf50', fontWeight: 600 }}>● 当前使用</span>}
+                    {asset.isDefault && <span style={{ fontSize: 10, color: '#ff9800', fontWeight: 600 }}>★ 默认</span>}
+                    {!asset.sourceWidth && <span style={{ fontSize: 10, color: '#999' }} title="缺少对齐元数据，切换时可能位移">⚠ 未校准</span>}
+                  </div>
+
+                  {/* 第二行：状态/元信息 */}
+                  <div style={{ fontSize: 11, color: '#999', marginBottom: 6 }}>
+                    {timeStr} · {asset.frameCount}帧 · {asset.frameWidth}×{asset.frameHeight} · {asset.format}
+                  </div>
+
+                  {/* 第三行：设置项（重命名时禁用交互） */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6, pointerEvents: isRenaming ? 'none' : 'auto', opacity: isRenaming ? 0.5 : 1 }}>
+                    <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}
+                      title="调整该动作在桌面上的显示大小。">
+                      <span>缩放</span>
+                      <input type="number" step="0.1" min="0.1" max="2" value={asset.displayScale}
+                        onChange={(e) => handleDisplayScaleChange(asset.id, e.target.value)}
+                        onBlur={() => handleSaveDisplayScale(asset)}
+                        style={{ width: 48, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3 }} />
+                    </label>
+                    <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}
+                      title="手动点击「应用」使用此动作时，是否持续循环播放。">
+                      <input type="checkbox" checked={asset.loop}
+                        onChange={() => handleToggleLoop(asset)}
+                        style={{ cursor: 'pointer' }} />
+                      手动循环
+                    </label>
+                    <span style={{ borderLeft: '1px solid #e0e0e0', height: 12, margin: '0 2px' }} />
+                    <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}
+                      title="左键点击桌宠时，此动作可作为互动动作候选。拖动和右键不会触发。">
+                      <input type="checkbox" checked={asset.triggerOnClick}
+                        onChange={() => handleToggleTriggerOnClick(asset)}
+                        style={{ cursor: 'pointer' }} />
+                      点击触发
+                    </label>
+                    <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}
+                      title="开启自动行为时，此动作可参与随机播放。待机动作通常不参与。">
+                      <input type="checkbox" checked={asset.includeInRandom}
+                        onChange={() => handleToggleRandom(asset)}
+                        style={{ cursor: 'pointer' }} />
+                      参与自动行为
+                    </label>
+                    {(asset.includeInRandom || asset.triggerOnClick) && (
+                      <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}
+                        title="点击触发或自动行为触发时，此动作播放几轮后回到待机动作。不影响手动循环。">
+                          <span>轮数</span>
+                          <input type="number" min="1" max="10" value={asset.autoPlayRepeatCount}
+                            onChange={(e) => handleChangeRepeatCount(asset, e.target.value)}
+                            style={{ width: 36, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3 }} />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* 第四行：操作按钮（重命名时切换为确定/取消） */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                     {isRenaming ? (
                       <>
-                        <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmRename(asset); if (e.key === 'Escape') handleCancelRename() }}
-                          autoFocus style={{ padding: '2px 6px', fontSize: 12, border: '1px solid #4a90d9', borderRadius: 3, width: 140 }} />
                         <button onClick={() => handleConfirmRename(asset)} style={btnStyle('#4caf50')}>确定</button>
                         <button onClick={handleCancelRename} style={btnStyle('#999')}>取消</button>
                       </>
                     ) : (
                       <>
-                        <span style={{ fontWeight: 600, fontSize: 13 }}>{asset.name}</span>
-                        <select
-                          value={asset.actionType}
-                          onChange={(e) => handleChangeActionType(asset, e.target.value)}
-                          title="设置动作类型，用于动作库整理和后续行为逻辑。"
-                          style={{ fontSize: 10, padding: '1px 4px', borderRadius: 3, border: '1px solid #ccc', backgroundColor: typeInfo.color, color: '#fff', cursor: 'pointer', outline: 'none' }}
-                        >
-                          {ACTION_TYPES.map(t => (
-                            <option key={t.value} value={t.value} style={{ backgroundColor: '#fff', color: '#333' }}>{t.label}</option>
-                          ))}
-                        </select>
-                        {asset.isActive && <span style={{ fontSize: 11, color: '#4caf50', fontWeight: 600 }}>● 当前使用</span>}
-                        {asset.isDefault && <span style={{ fontSize: 11, color: '#ff9800', fontWeight: 600 }}>★ 默认</span>}
-                        {!asset.sourceWidth && <span style={{ fontSize: 10, color: '#999' }} title="缺少对齐元数据，切换时可能位移">⚠ 未校准</span>}
-                        <span style={{ color: '#999', fontSize: 11, marginLeft: 'auto' }}>
-                          {timeStr} · {asset.frameCount}帧 · {asset.frameWidth}×{asset.frameHeight} · {asset.format}
-                        </span>
+                        {/* 主操作 */}
+                        <button onClick={() => handleApplyAsset(asset)} style={btnStyle('#4caf50')} title="将此动作设为当前使用动作，并立即播放。">应用</button>
+                        <span style={{ borderLeft: '1px solid #e0e0e0', height: 14, margin: '0 2px' }} />
+                        {/* 常用操作 */}
+                        <button onClick={() => handleOpenAssetDir(asset)} style={btnStyle('#1677ff')} title="打开此动作资源所在文件夹。">打开</button>
+                        <button onClick={() => handleExportAsset(asset)} style={btnStyle('#1677ff')} title="将此动作打包为 zip，便于备份或迁移。">导出</button>
+                        <button onClick={() => handleStartRename(asset)} style={btnStyle('#1677ff')} title="修改此动作在动作库中的显示名称。">重命名</button>
+                        <span style={{ borderLeft: '1px solid #e0e0e0', height: 14, margin: '0 2px' }} />
+                        {/* 危险操作 */}
+                        <button onClick={() => handleDeleteAsset(asset)} style={btnStyle('#f44336')} title="删除此动作资源。若正在使用，将自动切换到其他可用动作。">删除</button>
+                        <span style={{ borderLeft: '1px solid #e0e0e0', height: 14, margin: '0 2px' }} />
+                        {/* 低频操作 */}
+                        <button onClick={() => handleToggleDefault(asset)}
+                          style={btnStyle(asset.isDefault ? '#ff9800' : '#bbb')}
+                          title={asset.isDefault ? '取消此动作的默认状态。不会自动指定新的默认动作。' : '将此动作设为默认 fallback 动作。当前动作失效或需要默认动作时会优先使用。'}>
+                          {asset.isDefault ? '取消默认' : '设为默认'}
+                        </button>
+                        {!asset.sourceWidth && (
+                          <button onClick={() => handleRebuildAnchor(asset)}
+                            style={btnStyle('#bbb')} title="从源视频重新计算对齐数据。用于旧资源或对齐信息缺失的动作。">
+                            重建对齐
+                          </button>
+                        )}
+                        {asset.sourceWidth && (
+                          <button onClick={() => setExpandingAnchorId(expandingAnchorId === asset.id ? null : asset.id)}
+                            style={btnStyle(expandingAnchorId === asset.id ? '#78909c' : '#bbb')}
+                            title="微调该动作的显示位置，用于修正不同动作切换时的视觉偏移。">
+                            {expandingAnchorId === asset.id ? '收起微调 ▲' : '对齐微调 ▼'}
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
 
-                  {/* 第二行：缩放 / 手动循环 / 点击触发 / 参与自动行为 / 触发轮数 */}
-                  {!isRenaming && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                      <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}
-                        title="调整该动作在桌面上的显示大小。">
-                        <span>缩放</span>
-                        <input type="number" step="0.1" min="0.1" max="2" value={asset.displayScale}
-                          onChange={(e) => handleDisplayScaleChange(asset.id, e.target.value)}
-                          onBlur={() => handleSaveDisplayScale(asset)}
-                          style={{ width: 48, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3 }} />
-                      </label>
-                      <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}
-                        title="手动点击「应用」使用此动作时，是否持续循环播放。">
-                        <input type="checkbox" checked={asset.loop}
-                          onChange={() => handleToggleLoop(asset)}
-                          style={{ cursor: 'pointer' }} />
-                        手动循环
-                      </label>
-                      <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}
-                        title="左键点击桌宠时，此动作可作为互动动作候选。拖动和右键不会触发。">
-                        <input type="checkbox" checked={asset.triggerOnClick}
-                          onChange={() => handleToggleTriggerOnClick(asset)}
-                          style={{ cursor: 'pointer' }} />
-                        点击触发
-                      </label>
-                      <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}
-                        title="开启自动行为时，此动作可参与随机播放。待机动作通常不参与。">
-                        <input type="checkbox" checked={asset.includeInRandom}
-                          onChange={() => handleToggleRandom(asset)}
-                          style={{ cursor: 'pointer' }} />
-                        参与自动行为
-                      </label>
-                      {(asset.includeInRandom || asset.triggerOnClick) && (
-                        <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}
-                          title="点击触发或自动行为触发时，此动作播放几轮后回到待机动作。不影响手动循环。">
-                            <span>触发轮数</span>
-                            <input type="number" min="1" max="10" value={asset.autoPlayRepeatCount}
-                              onChange={(e) => handleChangeRepeatCount(asset, e.target.value)}
-                              style={{ width: 36, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3 }} />
-                        </label>
-                      )}
-                    </div>
-                  )}
-
-                  {/* 第三行：操作按钮 */}
-                  {!isRenaming && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                      <button onClick={() => handleApplyAsset(asset)} style={btnStyle('#4caf50')} title="将此动作设为当前使用动作，并立即播放。">应用</button>
-                      <button onClick={() => handleOpenAssetDir(asset)} style={btnStyle('#607d8b')} title="打开此动作资源所在文件夹。">打开</button>
-                      <button onClick={() => handleExportAsset(asset)} style={btnStyle('#00897b')} title="将此动作打包为 zip，便于备份或迁移。">导出</button>
-                      <button onClick={() => handleStartRename(asset)} style={btnStyle('#2196f3')} title="修改此动作在动作库中的显示名称。">重命名</button>
-                      <button onClick={() => handleDeleteAsset(asset)} style={btnStyle('#f44336')} title="删除此动作资源。若正在使用，将自动切换到其他可用动作。">删除</button>
-                      <span style={{ borderLeft: '1px solid #ddd', height: 14, margin: '0 2px' }} />
-                      <button onClick={() => handleToggleDefault(asset)}
-                        style={btnStyle(asset.isDefault ? '#ff9800' : '#bbb')}
-                        title={asset.isDefault ? '取消此动作的默认状态。不会自动指定新的默认动作。' : '将此动作设为默认 fallback 动作。当前动作失效或需要默认动作时会优先使用。'}>
-                        {asset.isDefault ? '取消默认' : '设为默认'}
-                      </button>
-                      {!asset.sourceWidth && (
-                        <button onClick={() => handleRebuildAnchor(asset)}
-                          style={btnStyle('#795548')} title="从源视频重新计算对齐数据。用于旧资源或对齐信息缺失的动作。">
-                          重建对齐
-                        </button>
-                      )}
-                      {asset.sourceWidth && (
-                        <button onClick={() => setExpandingAnchorId(expandingAnchorId === asset.id ? null : asset.id)}
-                          style={btnStyle(expandingAnchorId === asset.id ? '#00897b' : '#78909c')}
-                          title="微调该动作的显示位置，用于修正不同动作切换时的视觉偏移。">
-                          {expandingAnchorId === asset.id ? '收起微调 ▲' : '对齐微调 ▼'}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {/* 第四行：对齐微调（折叠） */}
-                  {!isRenaming && expandingAnchorId === asset.id && asset.sourceWidth && (
+                  {/* 对齐微调（折叠） */}
+                  {expandingAnchorId === asset.id && asset.sourceWidth && (
                     <div style={{ marginTop: 6, padding: '6px 8px', backgroundColor: '#f5f5f5', borderRadius: 4, fontSize: 11 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ color: '#666', fontWeight: 600 }}>水平修正</span>
