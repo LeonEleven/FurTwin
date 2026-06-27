@@ -595,9 +595,9 @@ export function App() {
       <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '2px solid #e0e0e0', paddingBottom: 0 }}>
         {([
           { key: 'actions' as const, label: '动作库' },
+          { key: 'behavior' as const, label: '自动行为' },
           { key: 'get-video' as const, label: '获取视频' },
           { key: 'extract' as const, label: '提取视频' },
-          { key: 'behavior' as const, label: '自动行为' },
         ]).map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             style={{
@@ -906,7 +906,7 @@ export function App() {
           {extractResult.trimWidth > 800 && <p style={{ color: '#e65100' }}>⚠ 画布仍偏大</p>}
           <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={handleApplyPreview} style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: 4 }}>应用到桌宠预览</button>
-            <button onClick={handleRestoreDemo} style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#ff9800', color: '#fff', border: 'none', borderRadius: 4 }}>恢复 Demo 预览</button>
+            <button onClick={handleRestoreDemo} style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#ff9800', color: '#fff', border: 'none', borderRadius: 4 }}>恢复内置预览</button>
             <button onClick={handleOpenOutputDir} style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#607d8b', color: '#fff', border: 'none', borderRadius: 4 }}>打开输出目录</button>
           </div>
         </div>
@@ -991,9 +991,19 @@ export function App() {
           </div>
         </div>
         {assets.length === 0 && (
-          <p style={{ margin: 0, color: '#888', fontSize: 12, padding: '12px 0', textAlign: 'center' }}>
-            当前没有动作。你可以导入动作包，或从上方视频提取生成新动作。
-          </p>
+          <div style={{ color: '#888', fontSize: 12, padding: '12px 0', textAlign: 'center' }}>
+            <p style={{ margin: '0 0 8px' }}>当前没有动作。你可以导入动作包，也可以先到「获取视频」生成提示词并制作视频，再到「提取视频」导入生成动作。</p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <button onClick={() => setActiveTab('get-video')}
+                style={{ padding: '4px 12px', fontSize: 12, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>
+                去获取视频
+              </button>
+              <button onClick={() => setActiveTab('extract')}
+                style={{ padding: '4px 12px', fontSize: 12, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>
+                去提取视频
+              </button>
+            </div>
+          </div>
         )}
         {assets.length > 0 && (<>
           {/* 类型筛选 tabs */}

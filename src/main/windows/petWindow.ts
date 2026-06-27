@@ -333,7 +333,7 @@ export function setupContextMenu(): void {
         },
       },
       {
-        label: '恢复 Demo 预览',
+        label: '恢复内置预览',
         click: () => {
           ipcMain.emit(IPC_CHANNELS.RESTORE_DEMO_MENU)
         },
