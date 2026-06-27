@@ -60,6 +60,7 @@ export function App() {
   const [autoPlayingName, setAutoPlayingName] = useState<string | null>(null)
   const [expandingAnchorId, setExpandingAnchorId] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [activeTab, setActiveTab] = useState<'actions' | 'get-video' | 'extract' | 'behavior'>('actions')
 
   const logRef = useRef<HTMLDivElement>(null)
 
@@ -406,8 +407,38 @@ export function App() {
   return (
     <div style={{ padding: 24, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: 680, margin: '0 auto' }}>
       <h1 style={{ fontSize: 20, marginBottom: 4 }}>FurTwin</h1>
-      <p style={{ color: '#888', fontSize: 13, marginBottom: 24 }}>FFmpeg 绿幕视频 → 透明序列帧</p>
+      <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>FFmpeg 绿幕视频 → 透明序列帧</p>
 
+      {/* Tab 导航 */}
+      <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '2px solid #e0e0e0', paddingBottom: 0 }}>
+        {([
+          { key: 'actions' as const, label: '动作库' },
+          { key: 'get-video' as const, label: '获取视频' },
+          { key: 'extract' as const, label: '提取视频' },
+          { key: 'behavior' as const, label: '自动行为' },
+        ]).map(tab => (
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+            style={{
+              padding: '8px 16px', fontSize: 13, cursor: 'pointer', border: 'none', borderRadius: '6px 6px 0 0',
+              backgroundColor: activeTab === tab.key ? '#f5f5f5' : 'transparent',
+              color: activeTab === tab.key ? '#333' : '#888',
+              fontWeight: activeTab === tab.key ? 600 : 400,
+              borderBottom: activeTab === tab.key ? '2px solid #f5f5f5' : '2px solid transparent',
+              marginBottom: -2,
+            }}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div>
+      {activeTab === 'get-video' && (
+        <div style={{ padding: 24, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', textAlign: 'center', color: '#888', fontSize: 13 }}>
+          <p style={{ margin: 0 }}>后续将在这里提供豆包提示词生成器，帮助你快速生成适合绿幕提取的视频提示词。</p>
+        </div>
+      )}
+
+      {activeTab === 'extract' && (<>
       {/* 输入视频 */}
       <div style={{ marginBottom: 12 }}>
         <label style={labelStyle} title="选择要处理的绿幕视频。建议使用固定机位、纯绿幕、主体完整的视频。">输入视频</label>
@@ -496,7 +527,6 @@ export function App() {
         </div>
       </div>
 
-      {/* 提取结果 */}
       {status === 'success' && extractResult && (
         <div style={{ padding: 12, backgroundColor: '#e8f5e9', borderRadius: 6, border: '1px solid #c8e6c9', fontSize: 13, marginBottom: 12 }}>
           <p style={{ fontWeight: 600, marginBottom: 4 }}>提取结果</p>
@@ -511,8 +541,10 @@ export function App() {
           </div>
         </div>
       )}
+      </>
+      )}
 
-      {/* 自动行为开关 */}
+      {activeTab === 'behavior' && (
       <div style={{ marginTop: 12, padding: '8px 12px', backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d0e3f7', fontSize: 13 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}
@@ -577,8 +609,9 @@ export function App() {
           </p>
         )}
       </div>
+      )}
 
-      {/* 动作库 */}
+      {activeTab === 'actions' && (
       <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 13, marginTop: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <p style={{ fontWeight: 600, margin: 0 }}>动作库</p>
@@ -783,6 +816,10 @@ export function App() {
           </div>
         </>)}
       </div>
+      )}
+
+      </div>
+
     </div>
   )
 }
