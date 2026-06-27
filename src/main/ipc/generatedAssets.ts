@@ -6,6 +6,7 @@ import { loadAssetInfo, getActiveAssetId, setDefaultAsset, rebuildAssetAnchor, c
 import { getControlPanel } from '../windows/controlPanel'
 import { getGeneratedDir, getRuntimeLocalConfigPath, getBundledLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
 import { scanAllActions, validateActionPath, validateActionName, renameAction, deleteActionDir, getFallbackActionCandidate, buildFallbackRuntimeConfig, findActionByPath, toActionFramesDir, type ActionEntry } from '../services/actionRepository'
+import { restoreDemo } from './preview'
 
 const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
@@ -107,28 +108,18 @@ export function setupGeneratedAssets(): void {
       writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
       console.log(`[generated] deleted active, switched to fallback: "${config.name}" (id=${fallback.id})`)
     } else {
-      // No remaining assets — delete local.config.json to fall back to demo
-      if (existsSync(LOCAL_CONFIG_PATH)) {
-        unlinkSync(LOCAL_CONFIG_PATH)
-      }
-      console.log('[generated] deleted active, no remaining assets, restored demo')
+      // No remaining assets — restore demo animation
+      console.log('[generated] deleted active, no remaining assets, restoring demo')
+      restoreDemo()
+      return { ok: true }
     }
 
-    // Notify pet to switch animation
-    if (fallback) {
-      const runtimeConfig = buildFallbackRuntimeConfig(fallback)
-      if (runtimeConfig) {
-        BrowserWindow.getAllWindows().forEach(win => {
-          if (!win.isDestroyed()) {
-            try { win.webContents.send(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, runtimeConfig) } catch {}
-          }
-        })
-      }
-    } else {
-      // No fallback, send RELOAD_ANIM to use demo
+    // Notify pet to switch animation (only when fallback exists)
+    const runtimeConfig = buildFallbackRuntimeConfig(fallback!)
+    if (runtimeConfig) {
       BrowserWindow.getAllWindows().forEach(win => {
         if (!win.isDestroyed()) {
-          try { win.webContents.send(IPC_CHANNELS.RELOAD_ANIM) } catch {}
+          try { win.webContents.send(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, runtimeConfig) } catch {}
         }
       })
     }
