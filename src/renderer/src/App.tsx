@@ -62,6 +62,25 @@ export function App() {
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [activeTab, setActiveTab] = useState<'actions' | 'get-video' | 'extract' | 'behavior'>('actions')
 
+  // 提示词生成器 state
+  const [promptOptions, setPromptOptions] = useState({
+    ratio: '16:9', duration: '5', fixedCamera: true,
+    firstFrameRef: true, loopFrames: true, moderateMotion: true, centerAnimal: true,
+    avoidWatermarkCorner: true,
+  })
+  const [presetCategory, setPresetCategory] = useState<string>('idle')
+  const [presetAction, setPresetAction] = useState<string>('stand')
+  const [customActionText, setCustomActionText] = useState<string>('')
+  const [generatedPrompt, setGeneratedPrompt] = useState<string>('')
+  const [copySuccess, setCopySuccess] = useState<boolean>(false)
+  const [promptGenerated, setPromptGenerated] = useState<boolean>(false)
+  const [promptEditMode, setPromptEditMode] = useState<boolean>(false)
+  const [promptManualMode, setPromptManualMode] = useState<boolean>(false)
+  const [promptOutOfSync, setPromptOutOfSync] = useState<boolean>(false)
+  const [editedPrompt, setEditedPrompt] = useState<string>('')
+  const [customActionError, setCustomActionError] = useState<boolean>(false)
+  const customActionRef = useRef<HTMLTextAreaElement>(null)
+
   const logRef = useRef<HTMLDivElement>(null)
 
   const refreshAssets = useCallback(async () => {
@@ -243,6 +262,169 @@ export function App() {
     { value: 'interact', label: '互动', color: '#2196f3' },
     { value: 'custom', label: '自定义', color: '#9e9e9e' },
   ]
+
+  // 提示词生成器：动作预设
+  const PRESET_CATEGORIES: Record<string, { label: string; presets: { id: string; label: string; desc: string }[] }> = {
+    idle: { label: '待机', presets: [
+      { id: 'stand', label: '原地站立', desc: '原地站立不动，微微摇尾巴，偶尔眨眼' },
+      { id: 'breathe', label: '轻微呼吸', desc: '安静站立，身体随呼吸轻微起伏' },
+      { id: 'blink', label: '眨眼看镜头', desc: '站立不动，偶尔眨眼看向镜头' },
+      { id: 'look', label: '左右看', desc: '站立不动，头部缓慢左右转动张望' },
+    ]},
+    play: { label: '玩耍', presets: [
+      { id: 'jump', label: '开心小跳', desc: '开心地小幅度原地跳跃' },
+      { id: 'turn', label: '转身', desc: '原地转一圈' },
+      { id: 'wag', label: '轻快摆尾', desc: '站立，尾巴轻快地左右摆动' },
+    ]},
+    sleep: { label: '睡觉', presets: [
+      { id: 'doze', label: '趴下打瞌睡', desc: '趴在地上，头低垂，偶尔抬一下头' },
+      { id: 'sleep', label: '闭眼呼吸', desc: '趴在地上闭眼睡觉，身体随呼吸起伏' },
+      { id: 'stretch', label: '伸懒腰', desc: '趴着然后伸一个懒腰，前爪向前伸展' },
+    ]},
+    eat: { label: '进食', presets: [
+      { id: 'eat', label: '低头进食', desc: '低头吃东西，嘴巴咀嚼' },
+      { id: 'lick', label: '舔嘴', desc: '吃完后舔舔嘴巴' },
+      { id: 'chew', label: '咀嚼', desc: '嘴巴持续咀嚼食物' },
+    ]},
+    clean: { label: '清洁', presets: [
+      { id: 'paw', label: '舔爪爪', desc: '坐着抬起前爪舔舐' },
+      { id: 'belly', label: '舔肚子', desc: '侧躺舔肚子上的毛' },
+      { id: 'groom', label: '梳理毛发', desc: '用舌头梳理身体上的毛发' },
+    ]},
+    interact: { label: '互动', presets: [
+      { id: 'tilt', label: '歪头看镜头', desc: '歪头好奇地看着镜头' },
+      { id: 'look-up', label: '抬头看镜头', desc: '抬头望向镜头' },
+      { id: 'approach', label: '靠近镜头卖萌', desc: '慢慢走向镜头，凑近看' },
+    ]},
+    custom: { label: '自定义', presets: [] },
+  }
+
+  // 提示词生成器：构建提示词文本（纯函数，供生成和自动同步共用）
+  const buildPromptText = useCallback(() => {
+    const actionDesc = presetCategory === 'custom'
+      ? customActionText.trim()
+      : (PRESET_CATEGORIES[presetCategory]?.presets.find(p => p.id === presetAction)?.desc || '')
+    if (!actionDesc) return ''
+
+    const parts: string[] = []
+    parts.push('请参考图片中的动物，生成一段视频。')
+    parts.push('严格参考图片中的动物，动物的外形、毛色、花纹、体型、尾巴、耳朵要和图片尽量一致。')
+    parts.push('使用纯绿色绿幕背景，画面中没有阴影、影子、反光和光影变化。')
+    parts.push('画面中只有这只动物，不要出现人、道具、文字、字幕、Logo 或其他物体。')
+    parts.push('动物全身包括尾巴始终完整可见，不要裁切身体。')
+
+    const camera: string[] = []
+    if (promptOptions.fixedCamera) camera.push('固定机位，不要拉近或推远')
+    if (promptOptions.firstFrameRef) camera.push('首帧姿态参考图片')
+    if (promptOptions.loopFrames) camera.push('首帧和尾帧尽量相同，方便循环播放')
+    if (promptOptions.moderateMotion) camera.push('动作幅度适中')
+    if (promptOptions.centerAnimal) camera.push('动物保持在画面中央')
+    if (camera.length > 0) parts.push(camera.join('，') + '。')
+
+    parts.push(`视频比例 ${promptOptions.ratio}，时长 ${promptOptions.duration} 秒。`)
+    parts.push('静音，写实风格，不要动漫风格。')
+    if (promptOptions.avoidWatermarkCorner) {
+      parts.push('动作主要发生在画面中央区域，不要让头部、尾巴、四肢或关键动作靠近左上角和右下角。')
+    }
+    parts.push(`动作描述：${actionDesc}。`)
+
+    return parts.join('\n')
+  }, [promptOptions, presetCategory, presetAction, customActionText])
+
+  // 提示词生成器：自动同步（仅在自动生成模式下生效，手动编辑和手动模式下不运行）
+  useEffect(() => {
+    if (!promptGenerated || promptEditMode || promptManualMode) return
+    const text = buildPromptText()
+    if (text) {
+      setGeneratedPrompt(text)
+      setCopySuccess(false)
+      setPromptOutOfSync(false)
+    }
+  }, [promptGenerated, promptEditMode, promptManualMode, buildPromptText])
+
+  // 提示词生成器：手动模式下参数变化时标记为不同步
+  useEffect(() => {
+    if (!promptManualMode || promptEditMode) return
+    setPromptOutOfSync(true)
+  }, [promptOptions, presetCategory, presetAction, customActionText])
+
+  // 提示词生成器：切换类型时自动选中第一个预设
+  const handlePresetCategoryChange = useCallback((category: string) => {
+    setPresetCategory(category)
+    const presets = PRESET_CATEGORIES[category]?.presets
+    setPresetAction(presets && presets.length > 0 ? presets[0].id : '')
+    setCustomActionError(false)
+  }, [])
+
+  // 提示词生成器：生成提示词（首次点击或重新生成）
+  const handleGeneratePrompt = useCallback(() => {
+    // 自定义动作校验
+    if (presetCategory === 'custom' && !customActionText.trim()) {
+      setCustomActionError(true)
+      customActionRef.current?.focus()
+      return
+    }
+    setCustomActionError(false)
+    const text = buildPromptText()
+    if (!text) return
+    setGeneratedPrompt(text)
+    setPromptGenerated(true)
+    setPromptEditMode(false)
+    setPromptManualMode(false)
+    setPromptOutOfSync(false)
+    setCopySuccess(false)
+  }, [buildPromptText, presetCategory, customActionText])
+
+  // 提示词生成器：进入编辑模式
+  const handleEnterEditMode = useCallback(() => {
+    setEditedPrompt(generatedPrompt)
+    setPromptEditMode(true)
+    setPromptManualMode(true)
+  }, [generatedPrompt])
+
+  // 提示词生成器：退出编辑模式（完成编辑）
+  const handleFinishEdit = useCallback(() => {
+    setGeneratedPrompt(editedPrompt)
+    setPromptEditMode(false)
+    // 保持 promptManualMode = true，防止 useEffect 自动覆盖
+  }, [editedPrompt])
+
+  // 提示词生成器：重新生成覆盖
+  const handleRegenerate = useCallback(() => {
+    if (presetCategory === 'custom' && !customActionText.trim()) {
+      setCustomActionError(true)
+      customActionRef.current?.focus()
+      return
+    }
+    setCustomActionError(false)
+    const text = buildPromptText()
+    if (!text) return
+    setGeneratedPrompt(text)
+    setPromptEditMode(false)
+    setPromptManualMode(false)
+    setPromptOutOfSync(false)
+    setCopySuccess(false)
+  }, [buildPromptText, presetCategory, customActionText])
+
+  // 提示词生成器：复制到剪贴板
+  const handleCopyPrompt = useCallback(async () => {
+    const textToCopy = promptEditMode ? editedPrompt : generatedPrompt
+    if (!textToCopy) return
+    try {
+      await navigator.clipboard.writeText(textToCopy)
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 2000)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = textToCopy
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 2000)
+    }
+  }, [promptEditMode, editedPrompt, generatedPrompt])
 
   const handleChangeActionType = useCallback((asset: GeneratedAsset, newType: string) => {
     setAssets(prev => prev.map(a => a.id === asset.id ? { ...a, actionType: newType } : a))
@@ -433,8 +615,196 @@ export function App() {
 
       <div>
       {activeTab === 'get-video' && (
-        <div style={{ padding: 24, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', textAlign: 'center', color: '#888', fontSize: 13 }}>
-          <p style={{ margin: 0 }}>后续将在这里提供豆包提示词生成器，帮助你快速生成适合绿幕提取的视频提示词。</p>
+        <div style={{ fontSize: 13 }}>
+          {/* 固定硬性要求 */}
+          <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#fff7e6', borderRadius: 6, border: '1px solid #ffe0b2' }}>
+            <p style={{ fontWeight: 600, margin: '0 0 6px', fontSize: 12, color: '#e65100' }}>固定硬性要求（每次生成自动包含）</p>
+            <ul style={{ margin: 0, paddingLeft: 18, color: '#666', fontSize: 12, lineHeight: 1.8 }}>
+              <li>严格参考图片中的动物</li>
+              <li>动物外形、毛色、花纹、体型、尾巴、耳朵尽量一致</li>
+              <li>纯绿色绿幕背景</li>
+              <li>没有阴影、影子、反光和光影变化</li>
+              <li>画面中只有这只动物</li>
+              <li>全身包括尾巴始终完整可见，不要裁切身体</li>
+              <li>不要出现人、道具、文字、字幕、Logo 或其他物体</li>
+              <li>静音</li>
+              <li>写实风格，不要动漫风格</li>
+            </ul>
+          </div>
+
+          {/* 可选参数 */}
+          <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d0e3f7' }}>
+            <p style={{ fontWeight: 600, margin: '0 0 8px', fontSize: 12 }}>可选参数</p>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                title="生成视频的画面比例，16:9 横屏，9:16 竖屏，1:1 正方形">
+                <span>比例</span>
+                <select value={promptOptions.ratio} onChange={e => setPromptOptions(p => ({ ...p, ratio: e.target.value }))}
+                  style={{ padding: '2px 4px', fontSize: 12, border: '1px solid #ccc', borderRadius: 3 }}>
+                  <option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option>
+                </select>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                title="生成视频的时长。5 秒适合单个动作，10 秒适合组合动作或慢动作">
+                <span>时长</span>
+                <select value={promptOptions.duration} onChange={e => setPromptOptions(p => ({ ...p, duration: e.target.value }))}
+                  style={{ padding: '2px 4px', fontSize: 12, border: '1px solid #ccc', borderRadius: 3 }}>
+                  <option value="5">5 秒</option><option value="10">10 秒</option>
+                </select>
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {([
+                { key: 'fixedCamera' as const, label: '固定机位', tip: '镜头保持不动，不拉近推远，避免画面抖动' },
+                { key: 'firstFrameRef' as const, label: '首帧参考图片', tip: '视频第一帧尽量匹配参考图片的姿态' },
+                { key: 'loopFrames' as const, label: '首尾帧循环', tip: '视频首帧和尾帧尽量相同，方便无缝循环播放' },
+                { key: 'moderateMotion' as const, label: '动作幅度适中', tip: '动作幅度不要过大，适合桌面宠物日常使用' },
+                { key: 'centerAnimal' as const, label: '动物居中', tip: '动物保持在画面中央，不要偏移' },
+                { key: 'avoidWatermarkCorner' as const, label: '避开水印角落', tip: '豆包免费版可能在左上角和右下角添加水印。勾选后提示词会要求动物关键动作避开这些区域' },
+              ]).map(opt => (
+                <label key={opt.key} title={opt.tip} style={{ display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer', fontSize: 12, color: '#666' }}>
+                  <input type="checkbox" checked={promptOptions[opt.key]}
+                    onChange={e => setPromptOptions(p => ({ ...p, [opt.key]: e.target.checked }))}
+                    style={{ cursor: 'pointer' }} />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* 动作预设 */}
+          <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0' }}>
+            <p style={{ fontWeight: 600, margin: '0 0 8px', fontSize: 12 }}>动作描述</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+              <select value={presetCategory} onChange={e => handlePresetCategoryChange(e.target.value)}
+                title="选择动作类型。不同类型对应不同的预设动作描述。选择「自定义」可自己填写。"
+                style={{ padding: '4px 8px', fontSize: 12, border: '1px solid #ccc', borderRadius: 3 }}>
+                {Object.entries(PRESET_CATEGORIES).map(([key, cat]) => (
+                  <option key={key} value={key}>{cat.label}</option>
+                ))}
+              </select>
+              {presetCategory !== 'custom' && PRESET_CATEGORIES[presetCategory]?.presets.length > 0 && (
+                <select value={presetAction} onChange={e => setPresetAction(e.target.value)}
+                  title="选择具体动作预设。预设描述会自动填入提示词。"
+                  style={{ padding: '4px 8px', fontSize: 12, border: '1px solid #ccc', borderRadius: 3 }}>
+                  {PRESET_CATEGORIES[presetCategory].presets.map(p => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            {presetCategory === 'custom' && (
+              <>
+                <textarea ref={customActionRef} value={customActionText}
+                  onChange={e => { setCustomActionText(e.target.value); if (customActionError) setCustomActionError(false) }}
+                  placeholder="请描述你想要的动作，例如：趴在地上，头枕着前爪，尾巴缓慢左右摆动"
+                  title="自定义动作描述。尽量详细描述动物的动作、姿态和运动方式，豆包会根据描述生成视频。"
+                  style={{ width: '100%', height: 60, padding: 6, fontSize: 12, border: customActionError ? '2px solid #f44336' : '1px solid #ccc', borderRadius: 3, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                {customActionError && (
+                  <p style={{ margin: '4px 0 0', fontSize: 11, color: '#f44336' }}>
+                    请先填写你想让宠物做什么动作
+                  </p>
+                )}
+              </>
+            )}
+            {presetCategory !== 'custom' && presetAction && (
+              <p style={{ margin: '4px 0 0', fontSize: 11, color: '#888' }}>
+                预设描述：{PRESET_CATEGORIES[presetCategory]?.presets.find(p => p.id === presetAction)?.desc}
+              </p>
+            )}
+            <p style={{ margin: '8px 0 0', fontSize: 11, color: '#e65100' }}>
+              ⚠ 豆包免费版可能在左上角和右下角添加水印。建议让宠物动作主要发生在画面中央，避免头部、尾巴或关键动作靠近左上角/右下角。
+            </p>
+          </div>
+
+          {/* 生成按钮 */}
+          <div style={{ marginBottom: 16 }}>
+            <button onClick={handleGeneratePrompt}
+              title="根据上方参数生成完整提示词。生成后修改参数会自动更新提示词。"
+              style={{ padding: '8px 24px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#4a90d9', color: '#fff', border: 'none', borderRadius: 4 }}>
+              生成提示词
+            </button>
+          </div>
+
+          {/* 生成结果 */}
+          {generatedPrompt && (
+            <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#e8f5e9', borderRadius: 6, border: '1px solid #c8e6c9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <p style={{ fontWeight: 600, margin: 0, fontSize: 12 }}>
+                  生成结果
+                  {promptEditMode && <span style={{ color: '#e65100', fontWeight: 400 }}>（编辑模式：参数变化不会自动覆盖）</span>}
+                  {!promptEditMode && promptManualMode && !promptOutOfSync && <span style={{ color: '#888', fontWeight: 400 }}>（手动编辑版本）</span>}
+                  {!promptEditMode && promptManualMode && promptOutOfSync && <span style={{ color: '#e65100', fontWeight: 400 }}>（手动编辑版本，参数已变化）</span>}
+                </p>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {promptEditMode ? (
+                    <>
+                      <button onClick={handleFinishEdit}
+                        title="保存当前编辑内容，退出编辑模式"
+                        style={{ padding: '4px 12px', fontSize: 12, cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: 3 }}>
+                        完成编辑
+                      </button>
+                      <button onClick={handleRegenerate}
+                        title="用当前参数重新生成提示词，覆盖编辑内容"
+                        style={{ padding: '4px 12px', fontSize: 12, cursor: 'pointer', backgroundColor: '#ff9800', color: '#fff', border: 'none', borderRadius: 3 }}>
+                        重新生成覆盖
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {promptManualMode && (
+                        <button onClick={handleRegenerate}
+                          title="用当前参数重新生成提示词，替换手动编辑版本"
+                          style={{ padding: '4px 12px', fontSize: 12, cursor: 'pointer', backgroundColor: '#ff9800', color: '#fff', border: 'none', borderRadius: 3 }}>
+                          重新生成覆盖
+                        </button>
+                      )}
+                      <button onClick={handleEnterEditMode}
+                        title="手动编辑提示词内容。编辑模式下参数变化不会自动覆盖。"
+                        style={{ padding: '4px 12px', fontSize: 12, cursor: 'pointer', backgroundColor: '#e0e0e0', color: '#333', border: 'none', borderRadius: 3 }}>
+                        编辑提示词
+                      </button>
+                      <button onClick={handleCopyPrompt}
+                        title="将提示词复制到剪贴板，然后去豆包网页端/App 粘贴使用"
+                        style={{ padding: '4px 12px', fontSize: 12, cursor: 'pointer', backgroundColor: copySuccess ? '#4caf50' : '#e0e0e0', color: copySuccess ? '#fff' : '#333', border: 'none', borderRadius: 3 }}>
+                        {copySuccess ? '✓ 已复制' : '复制提示词'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+              {!promptEditMode && promptManualMode && promptOutOfSync && (
+                <p style={{ margin: '0 0 8px', fontSize: 11, color: '#e65100' }}>
+                  ⚠ 上方参数已变化，当前提示词可能未同步。如需同步，请点击「重新生成覆盖」。
+                </p>
+              )}
+              {!promptEditMode && promptManualMode && !promptOutOfSync && (
+                <p style={{ margin: '0 0 8px', fontSize: 11, color: '#888' }}>
+                  当前提示词包含手动修改，不会被参数变化自动覆盖。如需恢复自动生成，请点击「重新生成覆盖」。
+                </p>
+              )}
+              {promptEditMode ? (
+                <textarea value={editedPrompt} onChange={e => setEditedPrompt(e.target.value)}
+                  style={{ width: '100%', height: 200, padding: 8, fontSize: 12, border: '1px solid #e0e0e0', borderRadius: 4, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', whiteSpace: 'pre-wrap' }} />
+              ) : (
+                <pre style={{ margin: 0, padding: 8, backgroundColor: '#fff', borderRadius: 4, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto', border: '1px solid #e0e0e0' }}>
+                  {generatedPrompt}
+                </pre>
+              )}
+            </div>
+          )}
+
+          {/* 使用说明 */}
+          <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', color: '#888', fontSize: 12 }}>
+            <p style={{ margin: '0 0 4px', fontWeight: 600 }}>使用流程</p>
+            <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
+              <li>选择动作和参数，点击「生成提示词」</li>
+              <li>点击「复制提示词」复制到剪贴板</li>
+              <li>打开豆包网页端或 App，上传参考图片并粘贴提示词</li>
+              <li>生成视频后保存到本地</li>
+              <li>回到「提取视频」Tab，选择视频进行提取</li>
+            </ol>
+          </div>
         </div>
       )}
 
