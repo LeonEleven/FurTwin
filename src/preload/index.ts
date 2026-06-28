@@ -120,8 +120,20 @@ contextBridge.exposeInMainWorld('controlAPI', {
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.EXTRACT_ERROR, handler) }
   },
   // --- 应用到预览 ---
-  applyToPreview: (outputDir: string, displayScale?: number) => {
-    ipcRenderer.send(IPC_CHANNELS.APPLY_TO_PREVIEW, { outputDir, displayScale })
+  applyToPreview: (outputDir: string, displayScale?: number, temporary?: boolean) => {
+    ipcRenderer.send(IPC_CHANNELS.APPLY_TO_PREVIEW, { outputDir, displayScale, temporary })
+  },
+  // --- P3C-1: 确认提取结果加入动作库 ---
+  confirmExtract: (actionId: string): Promise<{ ok: boolean; finalDir?: string; actionId?: string; error?: string }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.CONFIRM_EXTRACT, { actionId })
+  },
+  // --- P3C-1: 丢弃提取结果 ---
+  discardExtract: (actionId: string): Promise<{ ok: boolean; error?: string }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.DISCARD_EXTRACT, { actionId })
+  },
+  // --- P3C-1: 取消预览（不清除 local.config.json） ---
+  cancelPreview: () => {
+    ipcRenderer.send(IPC_CHANNELS.CANCEL_PREVIEW)
   },
   // --- 恢复 Demo ---
   restoreDemo: () => {

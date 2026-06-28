@@ -431,8 +431,18 @@ export function pauseAutoBehavior(): void {
   pauseUntil = Date.now() + pauseMs
   console.log(`[behavior] paused for ${p.manualPauseSec}s (manual action)`)
 
-  // If currently auto-playing, let it finish naturally but don't schedule next
-  // The idle fallback will be restored after pause expires via scheduleNext
+  // Clear any pending auto-action timer to prevent immediate switch
+  if (autoTimer !== null) {
+    clearTimeout(autoTimer)
+    autoTimer = null
+    console.log('[behavior] cleared pending auto-action timer')
+  }
+
+  // Reschedule: after pause expires, tick() will check isPaused() and resume normally
+  if (autoBehaviorEnabled) {
+    scheduleNext(pauseMs)
+    console.log(`[behavior] rescheduled auto-action after ${p.manualPauseSec}s pause`)
+  }
 }
 
 // ─── Public API ─────────────────────────────────────────
@@ -457,19 +467,21 @@ export function toggleAutoBehavior(enabled: boolean): void {
   saveAutoBehaviorEnabled(enabled)
   console.log(`[behavior] toggled: ${enabled}`)
 
+  // Always clear existing state first
+  if (autoTimer) {
+    clearTimeout(autoTimer)
+    autoTimer = null
+  }
+  isAutoPlaying = false
+  pauseUntil = 0  // Clear any pending manual pause
+
   if (enabled) {
-    // Resume: play idle and schedule next
+    // Resume: play idle and schedule next with firstDelaySec
     const p = getParams()
     playIdle()
     scheduleNext(p.firstDelaySec * 1000)
-  } else {
-    // Stop: clear timer, don't change current pet animation
-    if (autoTimer) {
-      clearTimeout(autoTimer)
-      autoTimer = null
-    }
-    isAutoPlaying = false
   }
+  // If disabling, just stop (already cleared above)
 
   notifyControlPanel()
 }

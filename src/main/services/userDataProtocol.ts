@@ -14,7 +14,7 @@
 import { protocol, app } from 'electron'
 import { join, resolve, relative, extname } from 'path'
 import { existsSync, readFileSync, statSync } from 'fs'
-import { getUserGeneratedDir } from './actionPaths'
+import { getUserGeneratedDir, getUserTempDir } from './actionPaths'
 
 // Allowed file extensions for action frames
 const ALLOWED_EXTENSIONS = new Set(['.png', '.webp', '.json'])
@@ -85,25 +85,40 @@ export function setupUserDataProtocolHandler(): void {
   protocol.handle(PROTOCOL_NAME, (request) => {
     try {
       // Parse the URL properly to handle query parameters
-      // Example: furtwin-userdata://actions/generated/123456/0.png?v=3&r=0
+      // For custom protocol URLs, new URL() parses:
+      //   furtwin-userdata://actions/generated/<id>/0001.png
+      //     → host='actions', pathname='/generated/<id>/0001.png'
+      //   furtwin-userdata://temp/extract/<id>/0001.png
+      //     → host='temp', pathname='/extract/<id>/0001.png'
       const url = new URL(request.url)
 
-      // For custom protocol, host is the first part after //
-      // furtwin-userdata://actions/generated/test_action_001/0001.png
-      // → host=actions, pathname=/generated/test_action_001/0001.png
-      // getUserGeneratedDir() already returns .../actions/generated
-      // So we need to strip the leading /generated/ from pathname
       const userGeneratedDir = getUserGeneratedDir()
+      const userTempDir = getUserTempDir()
 
-      // pathname is /generated/test_action_001/0001.png
-      // Remove leading /generated/ to get test_action_001/0001.png
-      const relativePath = url.pathname.replace(/^\/generated\//, '')
+      let baseDir: string
+      let relativePath: string
+
+      if (url.hostname === 'temp') {
+        // Temp path: furtwin-userdata://temp/extract/<id>/0001.png
+        // host='temp', pathname='/extract/<id>/0001.png'
+        // getUserTempDir() returns <userData>/temp
+        // We need to map /extract/<id>/0001.png → extract/<id>/0001.png
+        baseDir = userTempDir
+        relativePath = url.pathname.replace(/^\//, '')
+      } else {
+        // Generated path: furtwin-userdata://actions/generated/<id>/0001.png
+        // host='actions', pathname='/generated/<id>/0001.png'
+        // getUserGeneratedDir() returns <userData>/actions/generated
+        // We need to strip /generated/ prefix
+        baseDir = userGeneratedDir
+        relativePath = url.pathname.replace(/^\/generated\//, '')
+      }
 
       // Construct the full file path
-      const filePath = join(userGeneratedDir, relativePath)
+      const filePath = join(baseDir, relativePath)
 
       // Security: Validate that the path is within the allowed directory
-      if (!isPathWithinAllowedDir(filePath, userGeneratedDir)) {
+      if (!isPathWithinAllowedDir(filePath, baseDir)) {
         console.warn(`[userData-protocol] rejected: path outside allowed dir: ${request.url}`)
         return new Response('Forbidden', { status: 403 })
       }

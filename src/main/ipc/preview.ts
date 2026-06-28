@@ -11,6 +11,9 @@ const LOCAL_CONFIG_PATH = getRuntimeLocalConfigPath()
 const BUNDLED_CONFIG_PATH = getBundledLocalConfigPath()
 const PUBLIC_DIR = getPublicDir()
 
+// P3C-1: Saved config before temporary preview, used to restore on cancel
+let previousStableConfig: AnimConfig | null = null
+
 function getPngDimensions(filePath: string): { width: number; height: number } | null {
   try {
     const buf = readFileSync(filePath)
@@ -158,12 +161,13 @@ export function setupPreview(): void {
   // (Don't delete - user may have a valid preview. Only delete on explicit RESTORE_DEMO)
 
   // Apply to pet preview
-  ipcMain.on(IPC_CHANNELS.APPLY_TO_PREVIEW, (_event, payload: { outputDir?: string; displayScale?: number }) => {
+  ipcMain.on(IPC_CHANNELS.APPLY_TO_PREVIEW, (_event, payload: { outputDir?: string; displayScale?: number; temporary?: boolean }) => {
     console.log('[preview] APPLY_TO_PREVIEW received')
 
     const outputDir = payload?.outputDir || getFramesRealDir()
     const displayScale = Number(payload?.displayScale) || 0.5
-    console.log(`[preview] scanning dir: ${outputDir}`)
+    const isTemporary = payload?.temporary === true
+    console.log(`[preview] scanning dir: ${outputDir} temporary=${isTemporary}`)
 
     const frames = scanFrames(outputDir)
     if (!frames) {
@@ -188,39 +192,88 @@ export function setupPreview(): void {
       framePattern: `{}.${frames.format}`,
     }
 
-    try {
-      // Preserve existing behavior params when writing action config
-      // Priority: userData config > bundled config > empty
-      let existingConfig: Record<string, any> = {}
-      if (existsSync(LOCAL_CONFIG_PATH)) {
-        try {
-          existingConfig = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
-        } catch {}
-      } else if (existsSync(BUNDLED_CONFIG_PATH)) {
-        try {
-          existingConfig = JSON.parse(readFileSync(BUNDLED_CONFIG_PATH, 'utf-8'))
-        } catch {}
+    // P3C-1: Save current config before temporary preview for later restoration
+    if (isTemporary) {
+      try {
+        if (existsSync(LOCAL_CONFIG_PATH)) {
+          const raw = readFileSync(LOCAL_CONFIG_PATH, 'utf-8')
+          previousStableConfig = JSON.parse(raw)
+          console.log('[preview] saved previousStableConfig for temp preview restore')
+        } else {
+          previousStableConfig = null
+          console.log('[preview] no existing local.config.json, previousStableConfig=null')
+        }
+      } catch {
+        previousStableConfig = null
       }
-      // Merge: action config fields + preserved behavior params
-      const mergedConfig = {
-        ...config,
-        autoBehaviorEnabled: existingConfig.autoBehaviorEnabled,
-        autoBehaviorFirstDelaySec: existingConfig.autoBehaviorFirstDelaySec,
-        autoBehaviorMinIntervalSec: existingConfig.autoBehaviorMinIntervalSec,
-        autoBehaviorMaxIntervalSec: existingConfig.autoBehaviorMaxIntervalSec,
-        autoBehaviorManualPauseSec: existingConfig.autoBehaviorManualPauseSec,
+    }
+
+    // P3C-1: Temporary preview (pending extract) should NOT write local.config.json
+    // Only write for正式应用
+    if (!isTemporary) {
+      try {
+        // Preserve existing behavior params when writing action config
+        // Priority: userData config > bundled config > empty
+        let existingConfig: Record<string, any> = {}
+        if (existsSync(LOCAL_CONFIG_PATH)) {
+          try {
+            existingConfig = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+          } catch {}
+        } else if (existsSync(BUNDLED_CONFIG_PATH)) {
+          try {
+            existingConfig = JSON.parse(readFileSync(BUNDLED_CONFIG_PATH, 'utf-8'))
+          } catch {}
+        }
+        // Merge: action config fields + preserved behavior params
+        const mergedConfig = {
+          ...config,
+          autoBehaviorEnabled: existingConfig.autoBehaviorEnabled,
+          autoBehaviorFirstDelaySec: existingConfig.autoBehaviorFirstDelaySec,
+          autoBehaviorMinIntervalSec: existingConfig.autoBehaviorMinIntervalSec,
+          autoBehaviorMaxIntervalSec: existingConfig.autoBehaviorMaxIntervalSec,
+          autoBehaviorManualPauseSec: existingConfig.autoBehaviorManualPauseSec,
+        }
+        writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
+        console.log(`[preview] write local.config scale=${config.scale} displayScale=${config.displayScale}`)
+      } catch (e) {
+        console.error('[preview] failed to write local.config.json:', e)
+        return
       }
-      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
-      console.log(`[preview] write local.config scale=${config.scale} displayScale=${config.displayScale}`)
-    } catch (e) {
-      console.error('[preview] failed to write local.config.json:', e)
-      return
     }
 
     setTimeout(() => {
+      // P3C-1: Pause auto-behavior BEFORE switching to avoid race condition
+      pauseAutoBehavior()
       // Send runtime config directly to pet window
       notifyPetSwitchAnim(config)
     }, 100)
+  })
+
+  // P3C-1: Cancel preview and restore previous stable config
+  ipcMain.on(IPC_CHANNELS.CANCEL_PREVIEW, () => {
+    console.log('[preview] CANCEL_PREVIEW received')
+    if (previousStableConfig) {
+      // Restore the saved config (the正式 action that was active before preview)
+      console.log(`[preview] restoring previousStableConfig: ${previousStableConfig.name}`)
+      BrowserWindow.getAllWindows().forEach((win) => {
+        try {
+          if (!win.isDestroyed()) {
+            win.webContents.send(IPC_CHANNELS.SWITCH_ANIM_RUNTIME, previousStableConfig)
+          }
+        } catch {}
+      })
+      previousStableConfig = null
+    } else {
+      // No previous config saved — fall back to file-based reload
+      console.log('[preview] no previousStableConfig, falling back to CLEAR_RUNTIME_CONFIG')
+      BrowserWindow.getAllWindows().forEach((win) => {
+        try {
+          if (!win.isDestroyed()) {
+            win.webContents.send(IPC_CHANNELS.CLEAR_RUNTIME_CONFIG)
+          }
+        } catch {}
+      })
+    }
   })
 
   // Restore demo preview (from control panel)

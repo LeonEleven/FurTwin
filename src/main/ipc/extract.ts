@@ -3,7 +3,7 @@ import { spawn } from 'child_process'
 import { join, basename, extname, dirname } from 'path'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync, renameSync } from 'fs'
 import { IPC_CHANNELS, type ExtractOptions } from '../../shared/types'
-import { getExtractionOutputDir, getAssetMetadataPath, createGeneratedActionId, getUserExtractionTempActionDir, getUserGeneratedActionDir } from '../services/actionPaths'
+import { getExtractionOutputDir, getAssetMetadataPath, createGeneratedActionId, getUserExtractionTempActionDir, getUserExtractionTempDir, getUserGeneratedActionDir } from '../services/actionPaths'
 import { getFfmpegPath, getFfprobePath, getFfmpegNotFoundMessage } from '../services/ffmpegPath'
 
 const isDev = !app.isPackaged
@@ -127,6 +127,33 @@ export function setupSelectVideo(): void {
 }
 
 export function setupExtractFrames(): void {
+  // P3C-1: Clean up stale temp extract directories on startup
+  try {
+    const tempDir = getUserExtractionTempDir()
+    console.log(`[extract] startup cleanup: checking temp extract dir: ${tempDir}`)
+    if (existsSync(tempDir)) {
+      const entries = readdirSync(tempDir, { withFileTypes: true })
+      const dirs = entries.filter(e => e.isDirectory())
+      console.log(`[extract] startup cleanup: found ${dirs.length} subdirectory(ies) in temp/extract`)
+      let cleaned = 0
+      for (const entry of dirs) {
+        const dirPath = join(tempDir, entry.name)
+        try {
+          rmSync(dirPath, { recursive: true, force: true })
+          cleaned++
+          console.log(`[extract] startup cleanup: removed stale temp: ${entry.name}`)
+        } catch (e) {
+          console.warn(`[extract] startup cleanup failed for ${entry.name}:`, e)
+        }
+      }
+      console.log(`[extract] startup cleanup: done, removed ${cleaned}/${dirs.length}`)
+    } else {
+      console.log('[extract] startup cleanup: temp/extract dir does not exist, nothing to clean')
+    }
+  } catch (e) {
+    console.warn('[extract] startup temp cleanup error:', e)
+  }
+
   ipcMain.on(IPC_CHANNELS.EXTRACT_FRAMES, (event, options: ExtractOptions) => {
     const sender = BrowserWindow.fromWebContents(event.sender)
     if (!sender) return
@@ -219,13 +246,14 @@ export function setupExtractFrames(): void {
       if (code === 0) {
         // 从输出目录扫描帧信息
         const info = scanOutputDir(outputDir)
-        const result = {
+        const result: Record<string, unknown> = {
           outputDir,
           frameCount: info.frameCount,
           frameWidth: info.frameWidth,
           frameHeight: info.frameHeight,
           trimWidth: info.frameWidth,
           trimHeight: info.frameHeight,
+          actionId: outputResult.actionId,
         }
 
         // 从日志中解析 trim 信息
@@ -288,42 +316,9 @@ export function setupExtractFrames(): void {
           console.warn('[extract] metadata save failed:', e)
         }
 
-        // If user-temp, move to final location
-        let finalOutputDir = outputDir
-        if (outputResult.target === 'user-temp') {
-          const finalDir = getUserGeneratedActionDir(outputResult.actionId)
+        // P3C-1: Do NOT auto-move temp to final. Keep in temp for user confirmation.
 
-          // Check if final dir already exists
-          if (existsSync(finalDir)) {
-            console.warn(`[extract] final dir already exists: ${finalDir}`)
-            try {
-              rmSync(outputDir, { recursive: true, force: true })
-              console.log(`[extract] cleaned up user-temp dir: ${outputDir}`)
-            } catch (e) {
-              console.warn('[extract] failed to cleanup user-temp dir:', e)
-            }
-            safeSend(sender, IPC_CHANNELS.EXTRACT_ERROR, { code: -1, message: 'Target directory already exists' })
-            return
-          }
-
-          // Move temp to final (ensure parent directory exists)
-          try {
-            mkdirSync(dirname(finalDir), { recursive: true })
-            renameSync(outputDir, finalDir)
-            finalOutputDir = finalDir
-            console.log(`[extract] moved user-temp to final: ${finalDir}`)
-          } catch (e) {
-            console.warn('[extract] failed to move user-temp to final:', e)
-            // Keep temp dir for debugging
-            safeSend(sender, IPC_CHANNELS.EXTRACT_ERROR, { code: -1, message: `Failed to move to final directory: ${e.message}` })
-            return
-          }
-        }
-
-        // Update result with final outputDir
-        result.outputDir = finalOutputDir
-
-        console.log(`[extract] EXTRACT_DONE result=${JSON.stringify(result)}`)
+        console.log(`[extract] EXTRACT_DONE (pending confirmation) result=${JSON.stringify(result)}`)
         safeSend(sender, IPC_CHANNELS.EXTRACT_DONE, result)
       } else {
         // FFmpeg failed - clean up user-temp directory if applicable
@@ -354,5 +349,51 @@ export function setupExtractFrames(): void {
       }
       safeSend(sender, IPC_CHANNELS.EXTRACT_ERROR, { code: -1, message: err.message })
     })
+  })
+
+  // P3C-1: Confirm extract - move temp to final location
+  ipcMain.handle(IPC_CHANNELS.CONFIRM_EXTRACT, (_event, payload: { actionId: string }) => {
+    if (!payload?.actionId) return { ok: false, error: 'actionId 不能为空' }
+
+    const tempDir = getUserExtractionTempActionDir(payload.actionId)
+    const finalDir = getUserGeneratedActionDir(payload.actionId)
+
+    if (!existsSync(tempDir)) {
+      return { ok: false, error: '临时目录不存在，可能已确认或丢弃' }
+    }
+
+    if (existsSync(finalDir)) {
+      return { ok: false, error: '目标目录已存在' }
+    }
+
+    try {
+      mkdirSync(dirname(finalDir), { recursive: true })
+      renameSync(tempDir, finalDir)
+      console.log(`[extract] confirmed: moved ${tempDir} -> ${finalDir}`)
+      return { ok: true, finalDir, actionId: payload.actionId }
+    } catch (e: any) {
+      console.warn('[extract] confirm failed:', e)
+      return { ok: false, error: e.message }
+    }
+  })
+
+  // P3C-1: Discard extract - delete temp directory
+  ipcMain.handle(IPC_CHANNELS.DISCARD_EXTRACT, (_event, payload: { actionId: string }) => {
+    if (!payload?.actionId) return { ok: false, error: 'actionId 不能为空' }
+
+    const tempDir = getUserExtractionTempActionDir(payload.actionId)
+
+    if (!existsSync(tempDir)) {
+      return { ok: true } // Already gone, consider success
+    }
+
+    try {
+      rmSync(tempDir, { recursive: true, force: true })
+      console.log(`[extract] discarded: removed ${tempDir}`)
+      return { ok: true }
+    } catch (e: any) {
+      console.warn('[extract] discard failed:', e)
+      return { ok: false, error: e.message }
+    }
   })
 }

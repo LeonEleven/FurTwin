@@ -23,6 +23,7 @@ interface ExtractResult {
   frameHeight: number
   trimWidth: number
   trimHeight: number
+  actionId?: string
 }
 
 export function App() {
@@ -44,6 +45,8 @@ export function App() {
   const [errorMsg, setErrorMsg] = useState('')
   const [logs, setLogs] = useState('')
   const [extractResult, setExtractResult] = useState<ExtractResult | null>(null)
+  const [pendingExtract, setPendingExtract] = useState<boolean>(false)
+  const [previewApplied, setPreviewApplied] = useState<boolean>(false)
   const [assets, setAssets] = useState<GeneratedAsset[]>([])
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -100,7 +103,7 @@ export function App() {
 
   useEffect(() => {
     const offLog = window.controlAPI.onExtractLog((log) => setLogs((prev) => prev + log))
-    const offDone = window.controlAPI.onExtractDone((result) => { setStatus('success'); setExtractResult(result) })
+    const offDone = window.controlAPI.onExtractDone((result) => { setStatus('success'); setExtractResult(result); setPendingExtract(true) })
     const offErr = window.controlAPI.onExtractError((err) => { setStatus('error'); setErrorMsg(err.message) })
     return () => { offLog(); offDone(); offErr() }
   }, [])
@@ -154,9 +157,13 @@ export function App() {
     if (path) { setVideoPath(path); setLogs(''); setStatus('idle'); setErrorMsg(''); setExtractResult(null) }
   }, [])
 
-  const handleExtract = useCallback(() => {
+  const handleExtract = useCallback(async () => {
     if (!videoPath || status === 'processing') return
-    setLogs(''); setStatus('processing'); setErrorMsg(''); setExtractResult(null)
+    // P3C-1: If there's a pending extract, discard it first
+    if (pendingExtract && extractResult?.actionId) {
+      await window.controlAPI.discardExtract(extractResult.actionId)
+    }
+    setLogs(''); setStatus('processing'); setErrorMsg(''); setExtractResult(null); setPendingExtract(false); setPreviewApplied(false)
     window.controlAPI.extractFrames({
       input: videoPath, output: '', fps, similarity, blend, despill, format,
       trimAlpha, trimThreshold, trimPadding,
@@ -165,15 +172,17 @@ export function App() {
       crop: crop || undefined,
       centerCrop: centerCrop || undefined,
     })
-  }, [videoPath, fps, similarity, blend, despill, format, trimAlpha, trimThreshold, trimPadding, maskPreset, maskRegion, crop, centerCrop, status])
+  }, [videoPath, fps, similarity, blend, despill, format, trimAlpha, trimThreshold, trimPadding, maskPreset, maskRegion, crop, centerCrop, status, pendingExtract, extractResult])
 
   const handleApplyPreview = useCallback(() => {
     if (!extractResult) return
     if (extractResult.trimWidth > 800 || extractResult.trimHeight > 600) {
       if (!confirm(`裁剪后画布仍然较大（${extractResult.trimWidth}x${extractResult.trimHeight}），是否应用？`)) return
     }
-    window.controlAPI.applyToPreview(extractResult.outputDir, 0.5)
-  }, [extractResult])
+    // P3C-1: pending preview uses temporary mode (no local.config.json write)
+    window.controlAPI.applyToPreview(extractResult.outputDir, 0.5, pendingExtract)
+    setPreviewApplied(true)
+  }, [extractResult, pendingExtract])
 
   const handleRestoreDemo = useCallback(() => {
     window.controlAPI.restoreDemo()
@@ -185,6 +194,52 @@ export function App() {
     const res = await window.controlAPI.openPath(extractResult.outputDir)
     if (!res.ok) console.warn('[renderer] openPath failed:', res.error)
   }, [extractResult])
+
+  // P3C-1: 重置提取表单到初始状态
+  const resetExtractForm = useCallback(() => {
+    setVideoPath(''); setLogs(''); setStatus('idle'); setErrorMsg('')
+    setExtractResult(null); setPendingExtract(false); setPreviewApplied(false)
+    setMaskPreset(false); setMaskRegion(''); setCrop(''); setCenterCrop('')
+  }, [])
+
+  // P3C-1: 确认提取结果加入动作库
+  const handleConfirmExtract = useCallback(async () => {
+    if (!extractResult?.actionId) return
+    const res = await window.controlAPI.confirmExtract(extractResult.actionId)
+    if (res.ok) {
+      if (previewApplied) window.controlAPI.cancelPreview()
+      setPreviewApplied(false)
+      resetExtractForm()
+      refreshAssets()
+      setActiveTab('actions')
+    } else {
+      alert(`确认失败：${res.error}`)
+    }
+  }, [extractResult, refreshAssets, resetExtractForm, previewApplied])
+
+  // P3C-1: 丢弃提取结果
+  const handleDiscardExtract = useCallback(async () => {
+    if (!extractResult?.actionId) return
+    const res = await window.controlAPI.discardExtract(extractResult.actionId)
+    if (res.ok) {
+      if (previewApplied) window.controlAPI.cancelPreview()
+      setPreviewApplied(false)
+      resetExtractForm()
+    } else {
+      alert(`丢弃失败：${res.error}`)
+    }
+  }, [extractResult, resetExtractForm, previewApplied])
+
+  // P3C-1: 重新提取（丢弃当前 pending 结果，但保留视频路径和参数）
+  const handleReExtract = useCallback(async () => {
+    if (extractResult?.actionId) {
+      await window.controlAPI.discardExtract(extractResult.actionId)
+    }
+    if (previewApplied) window.controlAPI.cancelPreview()
+    setPreviewApplied(false)
+    setLogs(''); setStatus('idle'); setErrorMsg('')
+    setExtractResult(null); setPendingExtract(false)
+  }, [extractResult, previewApplied])
 
   const handleApplyAsset = useCallback((asset: GeneratedAsset) => {
     // Save current UI displayScale to metadata before switching
@@ -898,15 +953,21 @@ export function App() {
       </div>
 
       {status === 'success' && extractResult && (
-        <div style={{ padding: 12, backgroundColor: '#e8f5e9', borderRadius: 6, border: '1px solid #c8e6c9', fontSize: 13, marginBottom: 12 }}>
-          <p style={{ fontWeight: 600, marginBottom: 4 }}>提取结果</p>
+        <div style={{ padding: 12, backgroundColor: pendingExtract ? '#fff3e0' : '#e8f5e9', borderRadius: 6, border: pendingExtract ? '1px solid #ffe0b2' : '1px solid #c8e6c9', fontSize: 13, marginBottom: 12 }}>
+          <p style={{ fontWeight: 600, marginBottom: 4 }}>{pendingExtract ? '提取结果（待确认）' : '提取结果'}</p>
           <p>帧数: {extractResult.frameCount}</p>
           {extractResult.frameWidth > 0 && <p>原始尺寸: {extractResult.frameWidth}x{extractResult.frameHeight}</p>}
           {extractResult.trimWidth > 0 && <p>裁剪后: {extractResult.trimWidth}x{extractResult.trimHeight}</p>}
           {extractResult.trimWidth > 800 && <p style={{ color: '#e65100' }}>⚠ 画布仍偏大</p>}
           <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={handleApplyPreview} style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: 4 }}>应用到桌宠预览</button>
-            <button onClick={handleRestoreDemo} style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#ff9800', color: '#fff', border: 'none', borderRadius: 4 }}>恢复内置预览</button>
+            <button onClick={handleApplyPreview} title="临时预览提取结果，不正式加入动作库" style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#2196f3', color: '#fff', border: 'none', borderRadius: 4 }}>预览结果</button>
+            {pendingExtract && (
+              <>
+                <button onClick={handleConfirmExtract} title="将提取结果正式加入动作库" style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#4caf50', color: '#fff', border: 'none', borderRadius: 4 }}>确认加入动作库</button>
+                <button onClick={handleReExtract} title="清空当前结果，重新选择视频提取" style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#ff9800', color: '#fff', border: 'none', borderRadius: 4 }}>重新提取</button>
+                <button onClick={handleDiscardExtract} title="丢弃提取结果并删除临时文件" style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#f44336', color: '#fff', border: 'none', borderRadius: 4 }}>丢弃结果</button>
+              </>
+            )}
             <button onClick={handleOpenOutputDir} style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', backgroundColor: '#607d8b', color: '#fff', border: 'none', borderRadius: 4 }}>打开输出目录</button>
           </div>
         </div>
@@ -959,11 +1020,11 @@ export function App() {
                 style={{ width: '100%', padding: '2px 4px', border: '1px solid #ccc', borderRadius: 3 }} />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#666', marginBottom: 2 }} title="用户手动应用动作、右键切换动作或点击互动后，自动行为暂停的秒数。">手动暂停(秒)</label>
+              <label style={{ display: 'block', color: '#666', marginBottom: 2 }} title="手动切换动作或预览提取结果后，自动行为会暂停这段时间，避免马上被随机动作打断。">手动暂停(秒)</label>
               <input type="number" min="0" value={behaviorParams.manualPauseSec}
                 onChange={(e) => handleBehaviorParamChange('manualPauseSec', e.target.value)}
                 onBlur={handleSaveBehaviorParams}
-                title="用户手动应用动作、右键切换动作或点击互动后，自动行为暂停的秒数。"
+                title="手动切换动作或预览提取结果后，自动行为会暂停这段时间，避免马上被随机动作打断。"
                 style={{ width: '100%', padding: '2px 4px', border: '1px solid #ccc', borderRadius: 3 }} />
             </div>
           </div>

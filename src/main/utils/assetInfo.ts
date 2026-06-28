@@ -6,7 +6,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { execSync } from 'child_process'
-import { getGeneratedDir, getRuntimeLocalConfigPath, getBundledLocalConfigPath, toRendererPath } from '../services/actionPaths'
+import { getGeneratedDir, getRuntimeLocalConfigPath, getBundledLocalConfigPath, toRendererPath, getUserGeneratedDir } from '../services/actionPaths'
 
 const METADATA_FILE = 'asset-metadata.json'
 
@@ -235,8 +235,6 @@ export function computeDisplayAnchor(
  * Otherwise set it as default and clear all others.
  */
 export function setDefaultAsset(targetDirPath: string): void {
-  if (!existsSync(GENERATED_DIR)) return
-
   // Check if target is already the default
   const targetMetaPath = join(targetDirPath, METADATA_FILE)
   let isAlreadyDefault = false
@@ -247,20 +245,28 @@ export function setDefaultAsset(targetDirPath: string): void {
     }
   } catch {}
 
-  const entries = readdirSync(GENERATED_DIR, { withFileTypes: true })
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const dirPath = join(GENERATED_DIR, entry.name)
-    const metaPath = join(dirPath, METADATA_FILE)
-    try {
-      const meta = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf-8')) : {}
-      // If toggling off: clear all. If setting new: clear others, set target.
-      const shouldBeDefault = isAlreadyDefault ? false : dirPath === targetDirPath
-      if (meta.isDefault !== shouldBeDefault) {
-        meta.isDefault = shouldBeDefault
-        writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8')
-      }
-    } catch {}
+  // Scan both bundled and userData directories
+  const dirsToScan: string[] = []
+  if (existsSync(GENERATED_DIR)) dirsToScan.push(GENERATED_DIR)
+  const userGenDir = getUserGeneratedDir()
+  if (existsSync(userGenDir) && userGenDir !== GENERATED_DIR) dirsToScan.push(userGenDir)
+
+  for (const scanDir of dirsToScan) {
+    const entries = readdirSync(scanDir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const dirPath = join(scanDir, entry.name)
+      const metaPath = join(dirPath, METADATA_FILE)
+      try {
+        const meta = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf-8')) : {}
+        // If toggling off: clear all. If setting new: clear others, set target.
+        const shouldBeDefault = isAlreadyDefault ? false : dirPath === targetDirPath
+        if (meta.isDefault !== shouldBeDefault) {
+          meta.isDefault = shouldBeDefault
+          writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8')
+        }
+      } catch {}
+    }
   }
 }
 
@@ -268,19 +274,25 @@ export function setDefaultAsset(targetDirPath: string): void {
  * Clear isDefault from all generated assets.
  */
 export function clearAllDefaults(): void {
-  if (!existsSync(GENERATED_DIR)) return
-  const entries = readdirSync(GENERATED_DIR, { withFileTypes: true })
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const metaPath = join(GENERATED_DIR, entry.name, METADATA_FILE)
-    try {
-      if (!existsSync(metaPath)) continue
-      const meta = JSON.parse(readFileSync(metaPath, 'utf-8'))
-      if (meta.isDefault) {
-        meta.isDefault = false
-        writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8')
-      }
-    } catch {}
+  const dirsToScan: string[] = []
+  if (existsSync(GENERATED_DIR)) dirsToScan.push(GENERATED_DIR)
+  const userGenDir = getUserGeneratedDir()
+  if (existsSync(userGenDir) && userGenDir !== GENERATED_DIR) dirsToScan.push(userGenDir)
+
+  for (const scanDir of dirsToScan) {
+    const entries = readdirSync(scanDir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const metaPath = join(scanDir, entry.name, METADATA_FILE)
+      try {
+        if (!existsSync(metaPath)) continue
+        const meta = JSON.parse(readFileSync(metaPath, 'utf-8'))
+        if (meta.isDefault) {
+          meta.isDefault = false
+          writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8')
+        }
+      } catch {}
+    }
   }
 }
 

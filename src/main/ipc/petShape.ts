@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { PNG } from 'pngjs'
 import { IPC_CHANNELS } from '../../shared/types'
-import { toAbsoluteFramesDir, getUserGeneratedDir, getUserDataRootDir } from '../services/actionPaths'
+import { toAbsoluteFramesDir, getUserGeneratedDir, getUserDataRootDir, getUserTempDir } from '../services/actionPaths'
 import { isUserDataProtocolUrl, isBundledProtocolUrl } from '../services/userDataProtocol'
 
 const ALPHA_THRESHOLD = 48
@@ -137,6 +137,12 @@ function computeFrameShapeDisplay(filePath: string, displayW: number, displayH: 
 function resolveFrameDir(framesDir: string): string {
   // Handle userData protocol URLs
   if (isUserDataProtocolUrl(framesDir)) {
+    // P3C-1: Handle temp paths: furtwin-userdata://temp/extract/<actionId>
+    const tempMatch = framesDir.match(/furtwin-userdata:\/\/temp\/extract\/([^/]+)/)
+    if (tempMatch) {
+      const actionId = tempMatch[1]
+      return join(getUserTempDir(), 'extract', actionId)
+    }
     // Extract actionId from furtwin-userdata://actions/generated/<actionId>
     const match = framesDir.match(/furtwin-userdata:\/\/actions\/generated\/([^/]+)$/)
     if (match) {

@@ -100,9 +100,12 @@ declare global {
       selectVideo: () => Promise<string | null>
       extractFrames: (options: ExtractOptions) => void
       onExtractLog: (callback: (log: string) => void) => () => void
-      onExtractDone: (callback: (result: { outputDir: string; frameCount: number; frameWidth: number; frameHeight: number; trimWidth: number; trimHeight: number }) => void) => () => void
+      onExtractDone: (callback: (result: { outputDir: string; frameCount: number; frameWidth: number; frameHeight: number; trimWidth: number; trimHeight: number; actionId?: string }) => void) => () => void
       onExtractError: (callback: (err: { code: number; message: string }) => void) => () => void
-      applyToPreview: (outputDir: string, displayScale?: number) => void
+      applyToPreview: (outputDir: string, displayScale?: number, temporary?: boolean) => void
+      confirmExtract: (actionId: string) => Promise<{ ok: boolean; finalDir?: string; actionId?: string; error?: string }>
+      discardExtract: (actionId: string) => Promise<{ ok: boolean; error?: string }>
+      cancelPreview: () => void
       restoreDemo: () => void
       openPath: (path: string) => Promise<{ ok: boolean; error?: string }>
       listGeneratedAssets: () => Promise<GeneratedAssetInfo[]>
