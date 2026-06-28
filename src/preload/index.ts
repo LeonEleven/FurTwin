@@ -184,7 +184,11 @@ contextBridge.exposeInMainWorld('controlAPI', {
   exportAssetPackage: (path: string, name: string): Promise<{ ok: boolean; path?: string; error?: string }> => {
     return ipcRenderer.invoke(IPC_CHANNELS.EXPORT_ASSET_PACKAGE, { path, name })
   },
-  importAssetPackage: (): Promise<{ ok: boolean; dirName?: string; name?: string; error?: string }> => {
+  importAssetPackage: (): Promise<{
+    ok: boolean; dirName?: string; name?: string; error?: string;
+    batch?: boolean; results?: Array<{ file: string; ok: boolean; name?: string; error?: string }>;
+    succeeded?: number; failed?: number; summary?: string;
+  }> => {
     return ipcRenderer.invoke(IPC_CHANNELS.IMPORT_ASSET_PACKAGE)
   },
   // --- 更新当前使用动作的播放属性（立即生效） ---

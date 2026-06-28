@@ -122,7 +122,11 @@ declare global {
       setDefaultAsset: (path: string) => void
       rebuildAnchor: (path: string, dirName: string) => Promise<{ ok: boolean; rebuilt?: boolean; error?: string }>
       exportAssetPackage: (path: string, name: string) => Promise<{ ok: boolean; path?: string; error?: string }>
-      importAssetPackage: () => Promise<{ ok: boolean; dirName?: string; name?: string; error?: string }>
+      importAssetPackage: () => Promise<{
+        ok: boolean; dirName?: string; name?: string; error?: string;
+        batch?: boolean; results?: Array<{ file: string; ok: boolean; name?: string; error?: string }>;
+        succeeded?: number; failed?: number; summary?: string;
+      }>
       updateActivePlayback: (fields: { loop?: boolean; fps?: number }) => void
       onActiveAssetChanged: (callback: () => void) => () => void
       toggleAutoBehavior: (enabled: boolean) => void

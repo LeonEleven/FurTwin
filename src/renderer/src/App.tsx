@@ -301,9 +301,22 @@ export function App() {
 
   const handleImportAsset = useCallback(async () => {
     const res = await window.controlAPI.importAssetPackage()
-    if (res.ok) {
+    if (res.error === '用户取消') return
+
+    if (res.batch && res.results) {
+      // Batch import: show summary
+      const failed = res.results.filter(r => !r.ok)
+      if (failed.length === 0) {
+        alert(`全部导入成功：共 ${res.succeeded} 个动作包`)
+      } else {
+        const failLines = failed.map(r => `• ${r.file}：${r.error}`).join('\n')
+        alert(`导入完成\n成功 ${res.succeeded} 个，失败 ${res.failed} 个\n\n失败详情：\n${failLines}`)
+      }
+      if (res.succeeded && res.succeeded > 0) refreshAssets()
+    } else if (res.ok) {
+      // Single import success
       refreshAssets()
-    } else if (res.error !== '用户取消') {
+    } else {
       alert(`导入失败：${res.error}`)
     }
   }, [refreshAssets])

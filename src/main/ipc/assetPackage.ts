@@ -6,7 +6,7 @@
  */
 
 import { ipcMain, dialog, BrowserWindow } from 'electron'
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs'
 import { join, basename } from 'path'
 import JSZip from 'jszip'
 import { IPC_CHANNELS } from '../../shared/types'
@@ -72,17 +72,13 @@ export function setupAssetPackage(): void {
   })
 
   // ─── Import ───────────────────────────────────────────
-  ipcMain.handle(IPC_CHANNELS.IMPORT_ASSET_PACKAGE, async () => {
-    // Show open dialog
-    const result = await dialog.showOpenDialog({
-      title: '导入动作包',
-      filters: [{ name: '动作包', extensions: ['zip'] }],
-      properties: ['openFile'],
-    })
-    if (result.canceled || result.filePaths.length === 0) return { ok: false, error: '用户取消' }
 
-    const zipPath = result.filePaths[0]
-
+  /**
+   * Import a single .zip asset package into userData.
+   * Returns success with dirName/name, or failure with error message.
+   * On validation failure, cleans up the created directory.
+   */
+  async function importSinglePackage(zipPath: string): Promise<{ ok: boolean; dirName?: string; name?: string; error?: string }> {
     try {
       const zipData = readFileSync(zipPath)
       const zip = await JSZip.loadAsync(zipData)
@@ -134,6 +130,8 @@ export function setupAssetPackage(): void {
       // Validate: loadAssetInfo should succeed
       const info = loadAssetInfo(newDir, newId)
       if (!info) {
+        // Clean up on validation failure
+        try { rmSync(newDir, { recursive: true, force: true }) } catch { /* best-effort cleanup */ }
         return { ok: false, error: '导入后验证失败：无法读取动作信息' }
       }
 
@@ -142,6 +140,42 @@ export function setupAssetPackage(): void {
     } catch (e) {
       console.warn('[assetPackage] import failed:', e)
       return { ok: false, error: `导入失败：${String(e)}` }
+    }
+  }
+
+  ipcMain.handle(IPC_CHANNELS.IMPORT_ASSET_PACKAGE, async () => {
+    // Show open dialog — supports multi-select
+    const result = await dialog.showOpenDialog({
+      title: '导入动作包',
+      filters: [{ name: '动作包', extensions: ['zip'] }],
+      properties: ['openFile', 'multiSelections'],
+    })
+    if (result.canceled || result.filePaths.length === 0) return { ok: false, error: '用户取消' }
+
+    // Single file: preserve original return shape
+    if (result.filePaths.length === 1) {
+      return importSinglePackage(result.filePaths[0])
+    }
+
+    // Multiple files: import each and collect results
+    const results: Array<{ file: string; ok: boolean; name?: string; error?: string }> = []
+    for (const filePath of result.filePaths) {
+      const res = await importSinglePackage(filePath)
+      results.push({ file: basename(filePath), ...res })
+    }
+
+    const succeeded = results.filter(r => r.ok)
+    const failed = results.filter(r => !r.ok)
+    const summary = `成功 ${succeeded.length} 个，失败 ${failed.length} 个`
+
+    console.log(`[assetPackage] batch import: ${summary}`)
+    return {
+      ok: succeeded.length > 0,
+      batch: true,
+      results,
+      succeeded: succeeded.length,
+      failed: failed.length,
+      summary,
     }
   })
 }
