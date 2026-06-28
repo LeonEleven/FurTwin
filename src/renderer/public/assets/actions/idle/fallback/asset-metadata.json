@@ -1,0 +1,29 @@
+{
+  "name": "你在干什么？",
+  "sourceVideo": "C:\\Users\\lvsy\\Desktop\\Projects\\Video\\niannian-look.mp4",
+  "createdAt": "2026-06-18T03:34:25.159Z",
+  "frameCount": 61,
+  "frameWidth": 534,
+  "frameHeight": 697,
+  "format": "png",
+  "displayScale": 0.5,
+  "fps": 12,
+  "actionType": "idle",
+  "loop": true,
+  "isDefault": false,
+  "includeInRandom": false,
+  "interruptible": true,
+  "fpsOverride": null,
+  "autoPlayRepeatCount": 1,
+  "sourceWidth": 1280,
+  "sourceHeight": 720,
+  "trimBox": {
+    "x": 373,
+    "y": 23,
+    "w": 534,
+    "h": 697
+  },
+  "anchorOffsetX": 0,
+  "anchorOffsetY": 0,
+  "triggerOnClick": false
+}

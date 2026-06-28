@@ -98,15 +98,15 @@ function pushStartupConfig(): void {
 
   // 3. Last resort: demo config
   const demoConfig: AnimConfig = {
-    name: 'idle',
-    label: 'demo',
-    framesDir: './assets/actions/idle/frames',
+    name: 'fallback',
+    label: 'fallback',
+    framesDir: './assets/actions/idle/fallback',
     fps: 12,
-    scale: 1,
+    scale: 0.5,
     loop: true,
-    frameCount: 12,
-    frameWidth: 64,
-    frameHeight: 64,
+    frameCount: 61,
+    frameWidth: 534,
+    frameHeight: 697,
     framePattern: '{}.png',
   }
 
