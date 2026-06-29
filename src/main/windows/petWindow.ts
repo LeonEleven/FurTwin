@@ -1,11 +1,11 @@
 import { app, BrowserWindow, screen, ipcMain, Menu } from 'electron'
 import { join } from 'path'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { IPC_CHANNELS, type AnimConfig, type DragPayload } from '../../shared/types'
 import { isControlPanelVisible, showControlPanel, hideControlPanel } from './controlPanel'
 import { isAutoBehaviorActive } from '../behavior'
 import { scanAllActions, findActionByPath, toActionFramesDir, buildFallbackRuntimeConfig, getFallbackActionCandidate } from '../services/actionRepository'
-import { getRuntimeLocalConfigPath, toAbsoluteFramesDir } from '../services/actionPaths'
+import { getRuntimeLocalConfigPath, toAbsoluteFramesDir, getWindowStatePath } from '../services/actionPaths'
 import { isUserDataProtocolUrl, isBundledProtocolUrl } from '../services/userDataProtocol'
 import { loadAssetInfo, validateAssetInfo, computeDisplayAnchor } from '../utils/assetInfo'
 
@@ -14,6 +14,162 @@ const isDev = !app.isPackaged
 let petWindow: BrowserWindow | null = null
 let moveDebounce: ReturnType<typeof setTimeout> | null = null
 let lastDisplayId: number | null = null
+
+// ─── Window position persistence (v2: display-relative bottom-center) ────────
+// Saves the window's bottom-center as both absolute coordinates and relative
+// offsets within the current display. On restore, tries absolute first, then
+// falls back to relative mapping if the display layout changed.
+
+interface WindowStateV2 {
+  version: 2
+  displayId: number
+  bottomCenterX: number
+  bottomCenterY: number
+  displayBounds: { x: number; y: number; width: number; height: number }
+  relativeX: number  // 0..1, fraction within display.bounds
+  relativeY: number  // 0..1, fraction within display.bounds
+}
+
+type WindowState = WindowStateV2 | { x: number; y: number } | null
+
+function logDisplays(): void {
+  const displays = screen.getAllDisplays()
+  for (const d of displays) {
+    console.log(`[petWindow] display id=${d.id} bounds=(${d.bounds.x},${d.bounds.y},${d.bounds.width}x${d.bounds.height}) workArea=(${d.workArea.x},${d.workArea.y},${d.workArea.width}x${d.workArea.height}) scaleFactor=${d.scaleFactor}`)
+  }
+}
+
+function loadWindowState(): WindowState {
+  try {
+    const statePath = getWindowStatePath()
+    if (!existsSync(statePath)) return null
+    const raw = JSON.parse(readFileSync(statePath, 'utf-8'))
+    // v2 format
+    if (raw.version === 2 && typeof raw.bottomCenterX === 'number' && typeof raw.bottomCenterY === 'number') {
+      return raw as WindowStateV2
+    }
+    // Old format: x / y (top-left of 64x64 window)
+    if (typeof raw.x === 'number' && typeof raw.y === 'number' &&
+        Number.isFinite(raw.x) && Number.isFinite(raw.y)) {
+      return { x: raw.x, y: raw.y }
+    }
+  } catch { /* ignore corrupted state file */ }
+  return null
+}
+
+function saveWindowState(bounds: { x: number; y: number; width: number; height: number }): void {
+  try {
+    const bcX = bounds.x + Math.round(bounds.width / 2)
+    const bcY = bounds.y + bounds.height
+    const display = screen.getDisplayMatching(bounds)
+    const db = display.bounds
+    const relX = db.width > 0 ? (bcX - db.x) / db.width : 0.5
+    const relY = db.height > 0 ? (bcY - db.y) / db.height : 0.5
+    const state: WindowStateV2 = {
+      version: 2,
+      displayId: display.id,
+      bottomCenterX: bcX,
+      bottomCenterY: bcY,
+      displayBounds: { x: db.x, y: db.y, width: db.width, height: db.height },
+      relativeX: relX,
+      relativeY: relY,
+    }
+    writeFileSync(getWindowStatePath(), JSON.stringify(state), 'utf-8')
+    console.log(`[petWindow] saved state: display=${display.id} bounds=(${db.x},${db.y},${db.width}x${db.height}) bc=(${bcX},${bcY}) relative=(${relX.toFixed(3)},${relY.toFixed(3)})`)
+  } catch (e) {
+    console.warn('[petWindow] failed to save window state:', e)
+  }
+}
+
+/**
+ * Restore the 64x64 window position from saved state.
+ * Strategy: absolute bottom-center → relative mapping → primary center fallback.
+ * Uses display.bounds (not workArea) for containment — the window CAN overlap
+ * the taskbar area; we only need to prevent it from going fully off-screen.
+ */
+function restoreWindowPosition(state: WindowState, w: number, h: number): { x: number; y: number } {
+  if (!state) {
+    const primary = screen.getPrimaryDisplay().workArea
+    return { x: Math.round(primary.x + primary.width / 2 - w / 2), y: Math.round(primary.y + primary.height / 2 - h / 2) }
+  }
+
+  // Old format { x, y } — treat as top-left of a 64x64 window, use directly
+  if ('x' in state && 'y' in state && !('version' in state)) {
+    const x = state.x
+    const y = state.y
+    console.log(`[petWindow] restoring old format: topLeft=(${x},${y})`)
+    return clampToDisplayBounds(x, y, w, h)
+  }
+
+  // v2 format
+  const v2 = state as WindowStateV2
+  const displays = screen.getAllDisplays()
+  logDisplays()
+
+  // Strategy 1: find the original display by ID and bounds match
+  const original = displays.find(d => d.id === v2.displayId)
+  if (original) {
+    const db = original.bounds
+    const boundsMatch = db.x === v2.displayBounds.x && db.y === v2.displayBounds.y &&
+                        db.width === v2.displayBounds.width && db.height === v2.displayBounds.height
+    if (boundsMatch) {
+      // Display unchanged — use absolute bottom-center
+      let x = v2.bottomCenterX - Math.round(w / 2)
+      let y = v2.bottomCenterY - h
+      // Clamp within display.bounds (not workArea — allow taskbar overlap)
+      x = Math.max(db.x, Math.min(x, db.x + db.width - w))
+      y = Math.max(db.y, Math.min(y, db.y + db.height - h))
+      console.log(`[petWindow] restored absolute: display=${original.id} bc=(${v2.bottomCenterX},${v2.bottomCenterY}) → topLeft=(${x},${y})`)
+      return { x, y }
+    }
+    // Display exists but resolution/position changed — use relative mapping
+    const bcX = Math.round(db.x + v2.relativeX * db.width)
+    const bcY = Math.round(db.y + v2.relativeY * db.height)
+    let x = bcX - Math.round(w / 2)
+    let y = bcY - h
+    x = Math.max(db.x, Math.min(x, db.x + db.width - w))
+    y = Math.max(db.y, Math.min(y, db.y + db.height - h))
+    console.log(`[petWindow] restored relative (display changed): display=${original.id} relative=(${v2.relativeX.toFixed(3)},${v2.relativeY.toFixed(3)}) → bc=(${bcX},${bcY}) topLeft=(${x},${y})`)
+    return { x, y }
+  }
+
+  // Strategy 2: original display gone — map relative position onto primary display
+  const primary = screen.getPrimaryDisplay()
+  const pb = primary.bounds
+  const bcX = Math.round(pb.x + v2.relativeX * pb.width)
+  const bcY = Math.round(pb.y + v2.relativeY * pb.height)
+  let x = bcX - Math.round(w / 2)
+  let y = bcY - h
+  x = Math.max(pb.x, Math.min(x, pb.x + pb.width - w))
+  y = Math.max(pb.y, Math.min(y, pb.y + pb.height - h))
+  console.log(`[petWindow] restored relative (display gone): primary=${primary.id} relative=(${v2.relativeX.toFixed(3)},${v2.relativeY.toFixed(3)}) → topLeft=(${x},${y})`)
+  return { x, y }
+}
+
+/**
+ * Clamp a top-left position so the window center is inside some display.bounds.
+ * Uses display.bounds (not workArea) — the window can overlap the taskbar.
+ * Only falls back to primary center if the position is completely unreasonable.
+ */
+function clampToDisplayBounds(x: number, y: number, w: number, h: number): { x: number; y: number } {
+  const displays = screen.getAllDisplays()
+  const centerX = x + Math.round(w / 2)
+  const centerY = y + Math.round(h / 2)
+  for (const d of displays) {
+    const b = d.bounds
+    if (centerX >= b.x && centerX <= b.x + b.width && centerY >= b.y && centerY <= b.y + b.height) {
+      return {
+        x: Math.max(b.x, Math.min(x, b.x + b.width - w)),
+        y: Math.max(b.y, Math.min(y, b.y + b.height - h)),
+      }
+    }
+  }
+  const primary = screen.getPrimaryDisplay().workArea
+  return {
+    x: Math.round(primary.x + primary.width / 2 - w / 2),
+    y: Math.round(primary.y + primary.height / 2 - h / 2),
+  }
+}
 
 interface AssetEntry {
   id: string
@@ -117,15 +273,23 @@ function pushStartupConfig(): void {
 }
 
 export function createPetWindow(): BrowserWindow {
-  const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize
   const initialWidth = 64
   const initialHeight = 64
+
+  // Restore saved position or fall back to primary display center
+  const saved = loadWindowState()
+  const restored = restoreWindowPosition(saved, initialWidth, initialHeight)
+  const initX = restored.x
+  const initY = restored.y
+  if (saved) {
+    console.log(`[petWindow] restored position: → init=(${initX},${initY})`)
+  }
 
   petWindow = new BrowserWindow({
     width: initialWidth,
     height: initialHeight,
-    x: Math.round(screenWidth / 2 - initialWidth / 2),
-    y: Math.round(screenHeight / 2 - initialHeight / 2),
+    x: initX,
+    y: initY,
     title: '',
     transparent: true,
     frame: false,
@@ -239,6 +403,7 @@ export function setupWindowResize(): void {
       const clamped = clampedX !== newX || clampedY !== newY
       console.log(`[petWindow] resize(${mode}): ${w}x${h} oldBounds=(${bounds.x},${bounds.y},${bounds.width}x${bounds.height}) oldAnchor=(${oldAnchorX ?? '-'},${oldAnchorY ?? '-'}) newAnchor=(${newAnchorX ?? '-'},${newAnchorY ?? '-'}) → newPos=(${newX},${newY}) final=(${clampedX},${clampedY})${clamped ? ' CLAMPED' : ''}`)
       petWindow.setBounds({ x: clampedX, y: clampedY, width: w, height: h })
+      saveWindowState({ x: clampedX, y: clampedY, width: w, height: h })
     } catch {}
   })
 }
@@ -278,7 +443,8 @@ export function setupPetDrag(): void {
     isDragging = false
     if (petWindow && !petWindow.isDestroyed()) {
       const bounds = petWindow.getBounds()
-      console.log(`[petWindow] drag end: bounds=(${bounds.x},${bounds.y}) ${bounds.width}x${bounds.height}`)
+      saveWindowState(bounds)
+      console.log(`[petWindow] drag end: bounds=(${bounds.x},${bounds.y}) ${bounds.width}x${bounds.height} — position saved`)
     }
   })
 }

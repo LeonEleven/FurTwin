@@ -134,22 +134,12 @@ export function App() {
     return off
   }, [])
 
-  // Read initial auto-behavior state + params from local.config.json
+  // Read initial auto-behavior state + params from main process (userData config)
   useEffect(() => {
-    fetch('./assets/actions/idle/local.config.json?t=' + Date.now(), { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : {})
-      .then((config: any) => {
-        if (typeof config.autoBehaviorEnabled === 'boolean') {
-          setAutoBehaviorEnabled(config.autoBehaviorEnabled)
-        }
-        setBehaviorParams(prev => ({
-          firstDelaySec: Number.isFinite(config.autoBehaviorFirstDelaySec) ? config.autoBehaviorFirstDelaySec : prev.firstDelaySec,
-          minIntervalSec: Number.isFinite(config.autoBehaviorMinIntervalSec) ? config.autoBehaviorMinIntervalSec : prev.minIntervalSec,
-          maxIntervalSec: Number.isFinite(config.autoBehaviorMaxIntervalSec) ? config.autoBehaviorMaxIntervalSec : prev.maxIntervalSec,
-          manualPauseSec: Number.isFinite(config.autoBehaviorManualPauseSec) ? config.autoBehaviorManualPauseSec : prev.manualPauseSec,
-        }))
-      })
-      .catch(() => {})
+    window.controlAPI.getBehaviorState().then(({ enabled, params }) => {
+      setAutoBehaviorEnabled(enabled)
+      setBehaviorParams(params)
+    }).catch(() => {})
   }, [])
 
   const handleSelectVideo = useCallback(async () => {

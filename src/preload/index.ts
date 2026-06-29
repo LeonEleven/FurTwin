@@ -210,6 +210,9 @@ contextBridge.exposeInMainWorld('controlAPI', {
     ipcRenderer.on(IPC_CHANNELS.AUTO_BEHAVIOR_STATE_CHANGED, handler)
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.AUTO_BEHAVIOR_STATE_CHANGED, handler) }
   },
+  getBehaviorState: (): Promise<{ enabled: boolean; params: { firstDelaySec: number; minIntervalSec: number; maxIntervalSec: number; manualPauseSec: number } }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.GET_BEHAVIOR_STATE)
+  },
   saveBehaviorParams: (params: { firstDelaySec?: number; minIntervalSec?: number; maxIntervalSec?: number; manualPauseSec?: number }) => {
     ipcRenderer.send(IPC_CHANNELS.SAVE_BEHAVIOR_PARAMS, params)
   },

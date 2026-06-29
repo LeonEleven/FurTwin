@@ -207,6 +207,14 @@ export function getUserLocalConfigPath(): string {
 }
 
 /**
+ * Get the window-state.json path for persisting pet window position.
+ * Structure: <userData>/window-state.json
+ */
+export function getWindowStatePath(): string {
+  return join(getUserDataRootDir(), 'window-state.json')
+}
+
+/**
  * Get the runtime local.config.json path.
  * This is the single path used for all runtime config reads/writes.
  * Reads: prioritize userData, fallback to bundled.

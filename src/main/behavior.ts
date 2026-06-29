@@ -608,6 +608,14 @@ export function setupBehaviorIPC(): void {
     triggerClickInteraction()
   })
 
+  // Control panel requests initial behavior state on startup
+  ipcMain.handle(IPC_CHANNELS.GET_BEHAVIOR_STATE, () => {
+    const config = readLocalConfig()
+    const enabled = typeof config.autoBehaviorEnabled === 'boolean' ? config.autoBehaviorEnabled : true
+    const params = getParams()
+    return { enabled, params }
+  })
+
   // Control panel saves behavior params
   ipcMain.on(IPC_CHANNELS.SAVE_BEHAVIOR_PARAMS, (_event, payload: Record<string, number>) => {
     if (!payload) return

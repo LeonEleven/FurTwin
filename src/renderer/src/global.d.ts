@@ -132,6 +132,7 @@ declare global {
       toggleAutoBehavior: (enabled: boolean) => void
       onAutoBehaviorChanged: (callback: (enabled: boolean) => void) => () => void
       saveBehaviorParams: (params: { firstDelaySec?: number; minIntervalSec?: number; maxIntervalSec?: number; manualPauseSec?: number }) => void
+      getBehaviorState: () => Promise<{ enabled: boolean; params: { firstDelaySec: number; minIntervalSec: number; maxIntervalSec: number; manualPauseSec: number } }>
       onAutoPlayingChanged: (callback: (name: string | null) => void) => () => void
     }
   }
