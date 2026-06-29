@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { createPetWindow, setupWindowResize, setupPetDrag, setupContextMenu } from './windows/petWindow'
 import { createControlPanel, setQuitting, showControlPanel } from './windows/controlPanel'
+import { createTray, destroyTray } from './tray'
 import { setupSelectVideo, setupExtractFrames } from './ipc/extract'
 import { validateStartupConfig } from './ipc/preview'
 import { initBehavior, setupBehaviorIPC } from './behavior'
@@ -39,6 +40,9 @@ app.whenReady().then(() => {
   // 控制面板（初始隐藏）
   createControlPanel()
 
+  // 系统托盘
+  createTray()
+
   // IPC
   setupSelectVideo()
   setupExtractFrames()
@@ -63,6 +67,7 @@ app.whenReady().then(() => {
 
 // Allow real quit (bypass close->hide)
 app.on('before-quit', () => {
+  destroyTray()
   setQuitting()
 })
 

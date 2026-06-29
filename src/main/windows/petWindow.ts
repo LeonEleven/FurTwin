@@ -449,14 +449,38 @@ export function setupPetDrag(): void {
   })
 }
 
-export function setupContextMenu(): void {
-  ipcMain.on(IPC_CHANNELS.SHOW_CONTEXT_MENU, () => {
-    if (!petWindow || petWindow.isDestroyed()) return
+/**
+ * Build shared menu template for both pet context menu and tray menu.
+ * @param options.includeDevItems - include dev-only items like reload animation
+ * @param options.includeActionSwitcher - include the action switch submenu
+ */
+export function buildAppMenuTemplate(options?: {
+  includeDevItems?: boolean
+  includeActionSwitcher?: boolean
+}): Electron.MenuItemConstructorOptions[] {
+  const visible = isControlPanelVisible()
+  const autoEnabled = isAutoBehaviorActive()
 
-    const visible = isControlPanelVisible()
+  const items: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: visible ? '隐藏控制面板' : '显示控制面板',
+      click: () => {
+        if (visible) hideControlPanel()
+        else showControlPanel()
+      },
+    },
+    {
+      label: '自动行为',
+      type: 'checkbox',
+      checked: autoEnabled,
+      click: () => {
+        ipcMain.emit(IPC_CHANNELS.TOGGLE_AUTO_BEHAVIOR, null, { enabled: !autoEnabled })
+      },
+    },
+  ]
+
+  if (options?.includeActionSwitcher) {
     const assets = scanAssets()
-
-    // Build action submenu from generated assets
     const actionSubmenu: Electron.MenuItemConstructorOptions[] = assets.length > 0
       ? assets.map(asset => ({
           label: asset.isActive ? `✓ ${asset.name}` : asset.name,
@@ -466,49 +490,40 @@ export function setupContextMenu(): void {
         }))
       : [{ label: '（暂无动作）', enabled: false }]
 
-    const autoEnabled = isAutoBehaviorActive()
+    items.push({ type: 'separator' })
+    items.push({ label: '切换动作', submenu: actionSubmenu })
+  }
 
-    const template: Electron.MenuItemConstructorOptions[] = [
-      {
-        label: visible ? '隐藏控制面板' : '显示控制面板',
-        click: () => {
-          if (visible) hideControlPanel()
-          else showControlPanel()
-        },
+  if (options?.includeDevItems) {
+    items.push({ type: 'separator' })
+    items.push({
+      label: '重新加载动画',
+      click: () => {
+        if (petWindow && !petWindow.isDestroyed()) {
+          petWindow.webContents.send(IPC_CHANNELS.MENU_ACTION, 'reload-anim')
+        }
       },
-      {
-        label: '自动行为',
-        type: 'checkbox',
-        checked: autoEnabled,
-        click: () => {
-          ipcMain.emit(IPC_CHANNELS.TOGGLE_AUTO_BEHAVIOR, null, { enabled: !autoEnabled })
-        },
-      },
-      { type: 'separator' },
-      {
-        label: '切换动作',
-        submenu: actionSubmenu,
-      },
-      { type: 'separator' },
-      {
-        label: '重新加载动画',
-        click: () => {
-          if (petWindow && !petWindow.isDestroyed()) {
-            petWindow.webContents.send(IPC_CHANNELS.MENU_ACTION, 'reload-anim')
-          }
-        },
-      },
-      {
-        label: '恢复内置预览',
-        click: () => {
-          ipcMain.emit(IPC_CHANNELS.RESTORE_DEMO_MENU)
-        },
-      },
-      { type: 'separator' },
-      { label: '退出 FurTwin', click: () => { app.quit() } },
-    ]
+    })
+  }
 
+  items.push({ type: 'separator' })
+  items.push({
+    label: '恢复内置预览',
+    click: () => {
+      ipcMain.emit(IPC_CHANNELS.RESTORE_DEMO_MENU)
+    },
+  })
+  items.push({ type: 'separator' })
+  items.push({ label: '退出 FurTwin', click: () => { app.quit() } })
+
+  return items
+}
+
+export function setupContextMenu(): void {
+  ipcMain.on(IPC_CHANNELS.SHOW_CONTEXT_MENU, () => {
+    if (!petWindow || petWindow.isDestroyed()) return
     try {
+      const template = buildAppMenuTemplate({ includeDevItems: true, includeActionSwitcher: true })
       Menu.buildFromTemplate(template).popup({ window: petWindow })
     } catch {}
   })
