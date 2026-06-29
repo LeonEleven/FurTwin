@@ -87,6 +87,11 @@ contextBridge.exposeInMainWorld('petAPI', {
   triggerClickInteraction: () => {
     ipcRenderer.send(IPC_CHANNELS.TRIGGER_CLICK_INTERACTION)
   },
+  onStealthModeChanged: (callback: (enabled: boolean) => void) => {
+    const handler = (_: unknown, enabled: boolean) => callback(enabled)
+    ipcRenderer.on(IPC_CHANNELS.STEALTH_MODE_CHANGED, handler)
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.STEALTH_MODE_CHANGED, handler) }
+  },
 })
 
 contextBridge.exposeInMainWorld('controlAPI', {

@@ -15,6 +15,100 @@ let petWindow: BrowserWindow | null = null
 let moveDebounce: ReturnType<typeof setTimeout> | null = null
 let lastDisplayId: number | null = null
 
+// ─── Stealth mode ────────────────────────────────────────────────────────────
+let stealthModeEnabled = false
+let stealthCurrentlyHidden = false
+let stealthPollTimer: ReturnType<typeof setInterval> | null = null
+const STEALTH_POLL_INTERVAL_MS = 250
+
+export function isStealthModeActive(): boolean {
+  return stealthModeEnabled
+}
+
+function notifyStealthRenderer(): void {
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.webContents.send(IPC_CHANNELS.STEALTH_MODE_CHANGED, stealthModeEnabled)
+  }
+}
+
+function stealthShow(): void {
+  if (!stealthCurrentlyHidden) return
+  stealthCurrentlyHidden = false
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.setOpacity(1)
+    try { petWindow.setIgnoreMouseEvents(false) } catch {}
+  }
+  console.log('[stealth] pet shown')
+}
+
+function stealthHide(): void {
+  if (stealthCurrentlyHidden) return
+  stealthCurrentlyHidden = true
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.setOpacity(0)
+    try { petWindow.setIgnoreMouseEvents(true, { forward: true }) } catch {}
+  }
+  console.log('[stealth] pet hidden')
+}
+
+function isCursorInPetBounds(): boolean {
+  if (!petWindow || petWindow.isDestroyed()) return false
+  const point = screen.getCursorScreenPoint()
+  const bounds = petWindow.getBounds()
+  return point.x >= bounds.x && point.x <= bounds.x + bounds.width &&
+         point.y >= bounds.y && point.y <= bounds.y + bounds.height
+}
+
+function startStealthPolling(): void {
+  if (stealthPollTimer) return
+  stealthPollTimer = setInterval(() => {
+    if (!stealthModeEnabled) return
+    const inside = isCursorInPetBounds()
+    if (inside && !stealthCurrentlyHidden) {
+      stealthHide()
+    } else if (!inside && stealthCurrentlyHidden) {
+      stealthShow()
+    }
+  }, STEALTH_POLL_INTERVAL_MS)
+}
+
+function stopStealthPolling(): void {
+  if (stealthPollTimer) {
+    clearInterval(stealthPollTimer)
+    stealthPollTimer = null
+  }
+}
+
+function enableStealthMode(): void {
+  if (stealthModeEnabled) return
+  stealthModeEnabled = true
+  // If cursor is already inside pet bounds, hide immediately
+  if (isCursorInPetBounds()) {
+    stealthHide()
+  }
+  startStealthPolling()
+  notifyStealthRenderer()
+  console.log('[stealth] enabled')
+}
+
+function disableStealthMode(): void {
+  if (!stealthModeEnabled) return
+  stealthModeEnabled = false
+  stopStealthPolling()
+  stealthShow()
+  // Restore shape for current frame
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.webContents.send(IPC_CHANNELS.RELOAD_ANIM)
+  }
+  notifyStealthRenderer()
+  console.log('[stealth] disabled')
+}
+
+export function toggleStealthMode(): void {
+  if (stealthModeEnabled) disableStealthMode()
+  else enableStealthMode()
+}
+
 // ─── Window position persistence (v2: display-relative bottom-center) ────────
 // Saves the window's bottom-center as both absolute coordinates and relative
 // offsets within the current display. On restore, tries absolute first, then
@@ -457,6 +551,7 @@ export function setupPetDrag(): void {
 export function buildAppMenuTemplate(options?: {
   includeDevItems?: boolean
   includeActionSwitcher?: boolean
+  includeStealth?: boolean
 }): Electron.MenuItemConstructorOptions[] {
   const visible = isControlPanelVisible()
   const autoEnabled = isAutoBehaviorActive()
@@ -506,6 +601,15 @@ export function buildAppMenuTemplate(options?: {
     })
   }
 
+  if (options?.includeStealth) {
+    items.push({
+      label: '隐身模式',
+      type: 'checkbox',
+      checked: stealthModeEnabled,
+      click: () => { toggleStealthMode() },
+    })
+  }
+
   items.push({ type: 'separator' })
   items.push({
     label: '恢复内置预览',
@@ -523,7 +627,7 @@ export function setupContextMenu(): void {
   ipcMain.on(IPC_CHANNELS.SHOW_CONTEXT_MENU, () => {
     if (!petWindow || petWindow.isDestroyed()) return
     try {
-      const template = buildAppMenuTemplate({ includeDevItems: true, includeActionSwitcher: true })
+      const template = buildAppMenuTemplate({ includeDevItems: true, includeActionSwitcher: true, includeStealth: true })
       Menu.buildFromTemplate(template).popup({ window: petWindow })
     } catch {}
   })

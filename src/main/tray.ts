@@ -40,7 +40,7 @@ export function createTray(): void {
 
   // Right click → show context menu (rebuilt each time for fresh state)
   tray.on('right-click', () => {
-    const template = buildAppMenuTemplate({ includeActionSwitcher: false })
+    const template = buildAppMenuTemplate({ includeActionSwitcher: false, includeStealth: true })
     tray?.popUpContextMenu(Menu.buildFromTemplate(template))
   })
 

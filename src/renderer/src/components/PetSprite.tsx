@@ -14,6 +14,7 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
   const prevAnchorRef = useRef<{ x?: number; y?: number }>({})
+  const [stealthMode, setStealthMode] = useState(false)
 
   // Unified effectiveScale
   const effectiveScale = config.displayScale ?? config.scale
@@ -145,6 +146,14 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
     window.petAPI.showContextMenu()
   }, [])
 
+  // Listen for stealth mode changes from main process
+  useEffect(() => {
+    const remove = window.petAPI.onStealthModeChanged((enabled) => {
+      setStealthMode(enabled)
+    })
+    return remove
+  }, [])
+
   const imgSrc = currentFrameSrc
     ? `${currentFrameSrc}&r=${repaintKey}`
     : null
@@ -152,11 +161,11 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
   return (
     <div
       ref={wrapperRef}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
-      onContextMenu={handleContextMenu}
+      onPointerDown={stealthMode ? undefined : handlePointerDown}
+      onPointerMove={stealthMode ? undefined : handlePointerMove}
+      onPointerUp={stealthMode ? undefined : handlePointerUp}
+      onPointerCancel={stealthMode ? undefined : handlePointerCancel}
+      onContextMenu={stealthMode ? undefined : handleContextMenu}
       style={{
         position: 'absolute',
         left: 0,
@@ -164,7 +173,8 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
         width: displayWidth,
         height: displayHeight,
         overflow: 'hidden',
-        cursor: 'grab',
+        cursor: stealthMode ? 'default' : 'grab',
+        pointerEvents: stealthMode ? 'none' : 'auto',
         margin: 0,
         padding: 0,
         outline: 'none',

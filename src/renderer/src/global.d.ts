@@ -95,6 +95,7 @@ declare global {
       onSwitchAnimRuntime: (callback: (config: AnimConfig) => void) => () => void
       notifyPlaybackComplete: () => void
       triggerClickInteraction: () => void
+      onStealthModeChanged: (callback: (enabled: boolean) => void) => () => void
     }
     controlAPI: {
       selectVideo: () => Promise<string | null>
