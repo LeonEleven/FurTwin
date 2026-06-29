@@ -59,7 +59,7 @@ export function App() {
   }>({
     firstDelaySec: 30, minIntervalSec: 60, maxIntervalSec: 120, manualPauseSec: 120,
   })
-  const [showBehaviorParams, setShowBehaviorParams] = useState(false)
+  const [showBehaviorParams, setShowBehaviorParams] = useState(true)
   const [autoPlayingName, setAutoPlayingName] = useState<string | null>(null)
   const [expandingAnchorId, setExpandingAnchorId] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<string>('all')
@@ -89,7 +89,7 @@ export function App() {
   const refreshAssets = useCallback(async () => {
     try {
       const list = await window.controlAPI.listGeneratedAssets()
-      setAssets(list.slice(0, 20))
+      setAssets(list)
     } catch {}
   }, [])
 
@@ -653,7 +653,7 @@ export function App() {
       <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '2px solid #e0e0e0', paddingBottom: 0 }}>
         {([
           { key: 'actions' as const, label: '动作库' },
-          { key: 'behavior' as const, label: '自动行为' },
+          { key: 'behavior' as const, label: '行为与模式' },
           { key: 'get-video' as const, label: '获取视频' },
           { key: 'extract' as const, label: '提取视频' },
         ]).map(tab => (
@@ -1173,15 +1173,14 @@ export function App() {
                         style={{ cursor: 'pointer' }} />
                       参与自动行为
                     </label>
-                    {(asset.includeInRandom || asset.triggerOnClick) && (
-                      <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3 }}
-                        title="点击触发或自动行为触发时，此动作播放几轮后回到待机动作。不影响手动循环。">
-                          <span>轮数</span>
-                          <input type="number" min="1" max="10" value={asset.autoPlayRepeatCount}
-                            onChange={(e) => handleChangeRepeatCount(asset, e.target.value)}
-                            style={{ width: 36, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3 }} />
-                      </label>
-                    )}
+                    <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}
+                      title="轮数仅在参与自动行为或点击触发时生效。">
+                        <span>轮数</span>
+                        <input type="number" min="1" max="10" value={asset.autoPlayRepeatCount}
+                          disabled={!asset.includeInRandom && !asset.triggerOnClick}
+                          onChange={(e) => handleChangeRepeatCount(asset, e.target.value)}
+                          style={{ width: 36, padding: '2px 4px', fontSize: 11, border: '1px solid #ccc', borderRadius: 3, opacity: (!asset.includeInRandom && !asset.triggerOnClick) ? 0.4 : 1 }} />
+                    </label>
                   </div>
 
                   {/* 第四行：操作按钮（重命名时切换为确定/取消） */}

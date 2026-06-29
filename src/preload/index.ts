@@ -84,6 +84,9 @@ contextBridge.exposeInMainWorld('petAPI', {
   notifyPlaybackComplete: () => {
     ipcRenderer.send(IPC_CHANNELS.ANIM_PLAYBACK_COMPLETE)
   },
+  notifyAnimResourceMissing: () => {
+    ipcRenderer.send(IPC_CHANNELS.ANIM_RESOURCE_MISSING)
+  },
   triggerClickInteraction: () => {
     ipcRenderer.send(IPC_CHANNELS.TRIGGER_CLICK_INTERACTION)
   },

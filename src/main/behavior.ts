@@ -608,6 +608,25 @@ export function setupBehaviorIPC(): void {
     triggerClickInteraction()
   })
 
+  // Pet renderer reports current animation resource is missing (frames failed to load)
+  ipcMain.on(IPC_CHANNELS.ANIM_RESOURCE_MISSING, () => {
+    console.log('[behavior] ANIM_RESOURCE_MISSING received — looking for fallback')
+    const idle = selectIdleFallback()
+    if (idle) {
+      console.log(`[behavior] switching to fallback: ${idle.name}`)
+      switchAnimRuntime(idle)
+    } else {
+      console.log('[behavior] no valid fallback found, restoring demo')
+      // Emit RESTORE_DEMO_MENU which preview.ts handles (deletes local.config.json, sends CLEAR_RUNTIME_CONFIG)
+      ipcMain.emit(IPC_CHANNELS.RESTORE_DEMO_MENU)
+    }
+    // Notify control panel to refresh asset list (deleted actions will disappear)
+    const cp = getControlPanel()
+    if (cp && !cp.isDestroyed()) {
+      try { cp.webContents.send(IPC_CHANNELS.ACTIVE_ASSET_CHANGED) } catch {}
+    }
+  })
+
   // Control panel requests initial behavior state on startup
   ipcMain.handle(IPC_CHANNELS.GET_BEHAVIOR_STATE, () => {
     const config = readLocalConfig()

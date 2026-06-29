@@ -94,6 +94,7 @@ declare global {
       onClearRuntimeConfig: (callback: () => void) => () => void
       onSwitchAnimRuntime: (callback: (config: AnimConfig) => void) => () => void
       notifyPlaybackComplete: () => void
+      notifyAnimResourceMissing: () => void
       triggerClickInteraction: () => void
       onStealthModeChanged: (callback: (enabled: boolean) => void) => () => void
     }

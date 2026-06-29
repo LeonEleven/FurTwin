@@ -549,7 +549,7 @@ export function setupPetDrag(): void {
  * @param options.includeActionSwitcher - include the action switch submenu
  */
 export function buildAppMenuTemplate(options?: {
-  includeDevItems?: boolean
+  includeReloadAnimation?: boolean
   includeActionSwitcher?: boolean
   includeStealth?: boolean
   includeAutoStart?: boolean
@@ -603,7 +603,7 @@ export function buildAppMenuTemplate(options?: {
     items.push({ label: '切换动作', submenu: actionSubmenu })
   }
 
-  if (options?.includeDevItems) {
+  if (options?.includeReloadAnimation) {
     items.push({ type: 'separator' })
     items.push({
       label: '重新加载动画',
@@ -641,7 +641,7 @@ export function setupContextMenu(): void {
   ipcMain.on(IPC_CHANNELS.SHOW_CONTEXT_MENU, () => {
     if (!petWindow || petWindow.isDestroyed()) return
     try {
-      const template = buildAppMenuTemplate({ includeDevItems: true, includeActionSwitcher: true, includeStealth: true })
+      const template = buildAppMenuTemplate({ includeReloadAnimation: true, includeActionSwitcher: true, includeStealth: true, includeAutoStart: true })
       Menu.buildFromTemplate(template).popup({ window: petWindow })
     } catch {}
   })

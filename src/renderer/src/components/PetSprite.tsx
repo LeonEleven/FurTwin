@@ -15,6 +15,8 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
   const imgRef = useRef<HTMLImageElement>(null)
   const prevAnchorRef = useRef<{ x?: number; y?: number }>({})
   const [stealthMode, setStealthMode] = useState(false)
+  const consecutiveErrorsRef = useRef(0)
+  const resourceMissingNotifiedRef = useRef(false)
 
   // Unified effectiveScale
   const effectiveScale = config.displayScale ?? config.scale
@@ -154,6 +156,12 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
     return remove
   }, [])
 
+  // Reset error tracking when animation config changes
+  useEffect(() => {
+    consecutiveErrorsRef.current = 0
+    resourceMissingNotifiedRef.current = false
+  }, [config?.framesDir, reloadKey])
+
   const imgSrc = currentFrameSrc
     ? `${currentFrameSrc}&r=${repaintKey}`
     : null
@@ -190,8 +198,19 @@ export function PetSprite({ config, reloadKey }: PetSpriteProps) {
           src={imgSrc}
           alt=""
           draggable={false}
+          onLoad={() => {
+            consecutiveErrorsRef.current = 0
+          }}
           onError={(e) => {
-            console.warn(`[pet] img onError: src=${imgSrc}`)
+            consecutiveErrorsRef.current++
+            if (consecutiveErrorsRef.current % 5 === 0) {
+              console.warn(`[pet] img onError: ${consecutiveErrorsRef.current} consecutive failures, src=${imgSrc}`)
+            }
+            if (consecutiveErrorsRef.current >= 15 && !resourceMissingNotifiedRef.current) {
+              resourceMissingNotifiedRef.current = true
+              console.warn('[pet] resource missing threshold reached, notifying main process')
+              window.petAPI.notifyAnimResourceMissing()
+            }
           }}
           style={{
             position: 'absolute',
