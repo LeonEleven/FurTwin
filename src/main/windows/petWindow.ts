@@ -552,6 +552,7 @@ export function buildAppMenuTemplate(options?: {
   includeDevItems?: boolean
   includeActionSwitcher?: boolean
   includeStealth?: boolean
+  includeAutoStart?: boolean
 }): Electron.MenuItemConstructorOptions[] {
   const visible = isControlPanelVisible()
   const autoEnabled = isAutoBehaviorActive()
@@ -573,6 +574,19 @@ export function buildAppMenuTemplate(options?: {
       },
     },
   ]
+
+  if (options?.includeAutoStart) {
+    const autoStartEnabled = app.getLoginItemSettings().openAtLogin
+    items.push({
+      label: '开机自启',
+      type: 'checkbox',
+      checked: autoStartEnabled,
+      click: () => {
+        app.setLoginItemSettings({ openAtLogin: !autoStartEnabled })
+        console.log(`[app] openAtLogin set to ${!autoStartEnabled}`)
+      },
+    })
+  }
 
   if (options?.includeActionSwitcher) {
     const assets = scanAssets()
