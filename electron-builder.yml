@@ -17,6 +17,8 @@ extraResources:
       - "**/*"
   - from: resources/scripts/extract-transparent-frames.bundle.cjs
     to: scripts/extract-transparent-frames.bundle.cjs
+  - from: resources/tray.png
+    to: tray.png
   - from: src/renderer/public/assets/actions/idle
     to: assets/actions/idle
     filter:
