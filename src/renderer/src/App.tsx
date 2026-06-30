@@ -654,7 +654,7 @@ export function App() {
   }
 
   return (
-    <div style={{ padding: 24, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: 680, margin: '0 auto' }}>
+    <div style={{ padding: '16px 24px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: 680, margin: '0 auto', height: '100vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <h1 style={{ fontSize: 20, marginBottom: 4 }}>FurTwin</h1>
       <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>FFmpeg 绿幕视频 → 透明序列帧</p>
 
@@ -680,9 +680,9 @@ export function App() {
         ))}
       </div>
 
-      <div>
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       {activeTab === 'get-video' && (
-        <div style={{ fontSize: 13 }}>
+        <div style={{ fontSize: 13, overflow: 'auto' }}>
           {/* 固定硬性要求 */}
           <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#fff7e6', borderRadius: 6, border: '1px solid #ffe0b2' }}>
             <p style={{ fontWeight: 600, margin: '0 0 6px', fontSize: 12, color: '#e65100' }}>固定硬性要求（每次生成自动包含）</p>
@@ -875,7 +875,7 @@ export function App() {
         </div>
       )}
 
-      {activeTab === 'extract' && (<>
+      {activeTab === 'extract' && (<div style={{ overflow: 'auto' }}>
       {/* 输入视频 */}
       <div style={{ marginBottom: 12 }}>
         <label style={labelStyle} title="选择要处理的绿幕视频。建议使用固定机位、纯绿幕、主体完整的视频。">输入视频</label>
@@ -984,11 +984,11 @@ export function App() {
           </div>
         </div>
       )}
-      </>
+      </div>
       )}
 
       {activeTab === 'behavior' && (
-      <>
+      <div style={{ overflow: 'auto' }}>
       <div style={{ marginTop: 12, padding: '8px 12px', backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d0e3f7', fontSize: 13 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}
@@ -1067,11 +1067,11 @@ export function App() {
           开启后，鼠标移动到宠物区域时，宠物会暂时隐藏，并允许点击后方窗口。
         </p>
       </div>
-      </>
+      </div>
       )}
 
       {activeTab === 'actions' && (
-      <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 13, marginTop: 12 }}>
+      <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 13, marginTop: 12, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <p style={{ fontWeight: 600, margin: 0 }}>动作库</p>
           <div style={{ display: 'flex', gap: 4 }}>
@@ -1113,7 +1113,7 @@ export function App() {
               )
             })}
           </div>
-          <div style={{ maxHeight: 400, overflow: 'auto' }}>
+          <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
             {filteredAssets.length === 0 && (
               <p style={{ margin: 0, color: '#888', fontSize: 12, padding: '12px 0', textAlign: 'center' }}>
                 当前类型下暂无动作。
