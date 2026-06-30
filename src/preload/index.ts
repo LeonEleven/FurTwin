@@ -95,6 +95,9 @@ contextBridge.exposeInMainWorld('petAPI', {
     ipcRenderer.on(IPC_CHANNELS.STEALTH_MODE_CHANGED, handler)
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.STEALTH_MODE_CHANGED, handler) }
   },
+  toggleStealthMode: () => {
+    ipcRenderer.send(IPC_CHANNELS.TOGGLE_STEALTH_MODE)
+  },
 })
 
 contextBridge.exposeInMainWorld('controlAPI', {

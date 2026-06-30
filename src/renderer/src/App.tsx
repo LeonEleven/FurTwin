@@ -60,6 +60,7 @@ export function App() {
     firstDelaySec: 30, minIntervalSec: 60, maxIntervalSec: 120, manualPauseSec: 120,
   })
   const [showBehaviorParams, setShowBehaviorParams] = useState(true)
+  const [stealthMode, setStealthMode] = useState(false)
   const [autoPlayingName, setAutoPlayingName] = useState<string | null>(null)
   const [expandingAnchorId, setExpandingAnchorId] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<string>('all')
@@ -130,6 +131,14 @@ export function App() {
   useEffect(() => {
     const off = window.controlAPI.onAutoPlayingChanged((name) => {
       setAutoPlayingName(name)
+    })
+    return off
+  }, [])
+
+  // Listen for stealth mode state changes
+  useEffect(() => {
+    const off = window.petAPI.onStealthModeChanged((enabled) => {
+      setStealthMode(enabled)
     })
     return off
   }, [])
@@ -979,6 +988,7 @@ export function App() {
       )}
 
       {activeTab === 'behavior' && (
+      <>
       <div style={{ marginTop: 12, padding: '8px 12px', backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d0e3f7', fontSize: 13 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}
@@ -1043,6 +1053,21 @@ export function App() {
           </p>
         )}
       </div>
+
+      <div style={{ marginTop: 12, padding: '8px 12px', backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d0e3f7', fontSize: 13 }}>
+        <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+          title="开启后，鼠标移动到宠物区域时，宠物会暂时隐藏，并允许点击后方窗口。">
+          <input type="checkbox" checked={stealthMode}
+            onChange={() => window.petAPI.toggleStealthMode()}
+            style={{ cursor: 'pointer' }} />
+          <span style={{ fontWeight: 600 }}>隐身模式</span>
+          <span style={{ color: '#888', fontSize: 11 }}>({stealthMode ? '开启' : '关闭'})</span>
+        </label>
+        <p style={{ margin: '4px 0 0', fontSize: 11, color: '#888' }}>
+          开启后，鼠标移动到宠物区域时，宠物会暂时隐藏，并允许点击后方窗口。
+        </p>
+      </div>
+      </>
       )}
 
       {activeTab === 'actions' && (

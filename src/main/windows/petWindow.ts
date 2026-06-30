@@ -26,9 +26,13 @@ export function isStealthModeActive(): boolean {
 }
 
 function notifyStealthRenderer(): void {
-  if (petWindow && !petWindow.isDestroyed()) {
-    petWindow.webContents.send(IPC_CHANNELS.STEALTH_MODE_CHANGED, stealthModeEnabled)
-  }
+  BrowserWindow.getAllWindows().forEach((win) => {
+    try {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC_CHANNELS.STEALTH_MODE_CHANGED, stealthModeEnabled)
+      }
+    } catch {}
+  })
 }
 
 function stealthShow(): void {
@@ -644,5 +648,10 @@ export function setupContextMenu(): void {
       const template = buildAppMenuTemplate({ includeReloadAnimation: true, includeActionSwitcher: true, includeStealth: true, includeAutoStart: true })
       Menu.buildFromTemplate(template).popup({ window: petWindow })
     } catch {}
+  })
+
+  // Control panel toggle stealth mode
+  ipcMain.on(IPC_CHANNELS.TOGGLE_STEALTH_MODE, () => {
+    toggleStealthMode()
   })
 }

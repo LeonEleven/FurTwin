@@ -97,6 +97,7 @@ declare global {
       notifyAnimResourceMissing: () => void
       triggerClickInteraction: () => void
       onStealthModeChanged: (callback: (enabled: boolean) => void) => () => void
+      toggleStealthMode: () => void
     }
     controlAPI: {
       selectVideo: () => Promise<string | null>
