@@ -23,6 +23,8 @@ export function createTray(): void {
   let icon: Electron.NativeImage
   try {
     icon = nativeImage.createFromPath(iconPath)
+    const size = icon.getSize()
+    console.log(`[tray] icon loaded: path=${iconPath} empty=${icon.isEmpty()} size=${size.width}x${size.height}`)
     if (icon.isEmpty()) throw new Error('icon is empty')
   } catch (e) {
     console.warn('[tray] failed to load icon, creating fallback:', e)

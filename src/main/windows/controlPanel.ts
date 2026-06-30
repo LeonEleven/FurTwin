@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
+import { getAppIconPath } from '../utils/iconPath'
 import { IPC_CHANNELS } from '../../shared/types'
 
 const isDev = !app.isPackaged
@@ -28,6 +29,7 @@ export function createControlPanel(): BrowserWindow {
     width: 680,
     height: 720,
     title: 'FurTwin',
+    icon: getAppIconPath(),
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
