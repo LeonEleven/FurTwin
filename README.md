@@ -44,8 +44,8 @@ FurTwin 是一款 Windows 桌面宠物软件，支持从绿幕视频提取透明
 | 文档 | 说明 |
 |------|------|
 | [USER_GUIDE.md](USER_GUIDE.md) | 用户使用指南 |
-| [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) | 发行前回归清单 |
-| [PROJECT_AUDIT.md](PROJECT_AUDIT.md) | 项目盘点报告 |
+| [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) | 发行前回归清单 |
+| [docs/PROJECT_AUDIT.md](docs/PROJECT_AUDIT.md) | 项目盘点报告 |
 | [docs/ai-generation-prompt.md](docs/ai-generation-prompt.md) | AI 视频提示词指南 |
 | [docs/ffmpeg-keying.md](docs/ffmpeg-keying.md) | FFmpeg 扣绿说明 |
 
