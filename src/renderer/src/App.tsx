@@ -654,7 +654,7 @@ export function App() {
   }
 
   return (
-    <div style={{ padding: '16px 24px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: 680, margin: '0 auto', height: '100vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ padding: '16px 24px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: '100%', margin: '0 auto', height: '100vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <h1 style={{ fontSize: 20, marginBottom: 4 }}>FurTwin</h1>
       <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>FFmpeg 绿幕视频 → 透明序列帧</p>
 
@@ -680,9 +680,9 @@ export function App() {
         ))}
       </div>
 
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
       {activeTab === 'get-video' && (
-        <div style={{ fontSize: 13, overflow: 'auto' }}>
+        <div style={{ fontSize: 13, maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
           {/* 固定硬性要求 */}
           <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#fff7e6', borderRadius: 6, border: '1px solid #ffe0b2' }}>
             <p style={{ fontWeight: 600, margin: '0 0 6px', fontSize: 12, color: '#e65100' }}>固定硬性要求（每次生成自动包含）</p>
@@ -854,7 +854,7 @@ export function App() {
                 <textarea value={editedPrompt} onChange={e => setEditedPrompt(e.target.value)}
                   style={{ width: '100%', height: 200, padding: 8, fontSize: 12, border: '1px solid #e0e0e0', borderRadius: 4, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', whiteSpace: 'pre-wrap' }} />
               ) : (
-                <pre style={{ margin: 0, padding: 8, backgroundColor: '#fff', borderRadius: 4, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto', border: '1px solid #e0e0e0' }}>
+                <pre style={{ margin: 0, padding: 8, backgroundColor: '#fff', borderRadius: 4, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 200, overflow: 'auto', border: '1px solid #e0e0e0', maxWidth: '100%', boxSizing: 'border-box' }}>
                   {generatedPrompt}
                 </pre>
               )}
@@ -875,7 +875,7 @@ export function App() {
         </div>
       )}
 
-      {activeTab === 'extract' && (<div style={{ overflow: 'auto' }}>
+      {activeTab === 'extract' && (<div style={{ maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
       {/* 输入视频 */}
       <div style={{ marginBottom: 12 }}>
         <label style={labelStyle} title="选择要处理的绿幕视频。建议使用固定机位、纯绿幕、主体完整的视频。">输入视频</label>
@@ -959,7 +959,7 @@ export function App() {
       {/* 日志 */}
       <div style={{ marginBottom: 12 }}>
         <label style={labelStyle} title="显示 FFmpeg 处理过程、帧数、裁剪尺寸、错误信息等。">输出日志</label>
-        <div ref={logRef} style={{ height: 160, overflow: 'auto', backgroundColor: '#1e1e1e', color: '#d4d4d4', padding: 12, borderRadius: 6, fontSize: 12, fontFamily: 'Consolas, "Courier New", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        <div ref={logRef} style={{ height: 160, overflow: 'auto', backgroundColor: '#1e1e1e', color: '#d4d4d4', padding: 12, borderRadius: 6, fontSize: 12, fontFamily: 'Consolas, "Courier New", monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxWidth: '100%', boxSizing: 'border-box' }}>
           {logs || '等待执行...'}
         </div>
       </div>
@@ -988,7 +988,7 @@ export function App() {
       )}
 
       {activeTab === 'behavior' && (
-      <div style={{ overflow: 'auto' }}>
+      <div style={{ maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
       <div style={{ marginTop: 12, padding: '8px 12px', backgroundColor: '#f0f7ff', borderRadius: 6, border: '1px solid #d0e3f7', fontSize: 13 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}
@@ -1071,7 +1071,7 @@ export function App() {
       )}
 
       {activeTab === 'actions' && (
-      <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 13, marginTop: 12, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 13, marginTop: 12, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxWidth: '100%', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <p style={{ fontWeight: 600, margin: 0 }}>动作库</p>
           <div style={{ display: 'flex', gap: 4 }}>

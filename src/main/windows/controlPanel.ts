@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { getAppIconPath } from '../utils/iconPath'
 import { IPC_CHANNELS } from '../../shared/types'
@@ -25,9 +25,26 @@ function refreshPetSurface() {
 }
 
 export function createControlPanel(): BrowserWindow {
+  // 获取屏幕可用区域，动态计算默认尺寸
+  const primaryDisplay = screen.getPrimaryDisplay()
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize
+
+  // 默认宽度 900，不超过屏幕宽度 - 100（留边距）
+  const defaultWidth = Math.min(900, screenWidth - 100)
+
+  // 默认高度目标 980，但不超过屏幕可用高度 - 80（留任务栏和边距）
+  const targetHeight = 980
+  const defaultHeight = Math.min(targetHeight, screenHeight - 80)
+
+  // 最小尺寸
+  const minWidth = 680
+  const minHeight = 700
+
   controlPanel = new BrowserWindow({
-    width: 680,
-    height: 720,
+    width: defaultWidth,
+    height: defaultHeight,
+    minWidth: minWidth,
+    minHeight: minHeight,
     title: 'FurTwin',
     icon: getAppIconPath(),
     show: false,
