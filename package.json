@@ -10,7 +10,9 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "predist": "node scripts/check-ffmpeg-assets.mjs && node scripts/build-extract-script.mjs",
-    "dist": "electron-vite build && electron-builder --win --config"
+    "dist": "electron-vite build && electron-builder --win --config",
+    "dist:win": "electron-vite build && electron-builder --win --config -c.win.target=nsis",
+    "dist:win:zip": "electron-vite build && electron-builder --win --config -c.win.target=zip"
   },
   "dependencies": {
     "jszip": "^3.10.1",

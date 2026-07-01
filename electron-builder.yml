@@ -27,8 +27,14 @@ extraResources:
       - "**/*.webp"
 win:
   executableName: furtwin
+  artifactName: ${name}-${version}-win-unpacked.${ext}
+  target:
+    - target: nsis
+    - target: zip
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  oneClick: false
+  allowToChangeInstallationDirectory: true
