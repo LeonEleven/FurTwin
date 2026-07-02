@@ -601,6 +601,22 @@ export function App() {
     setSelectedActionIds([])
   }, [])
 
+  // 批量导出
+  const handleBatchExport = useCallback(async () => {
+    if (selectedActionIds.length === 0) return
+    const items = selectedActionIds
+      .map(id => assets.find(a => a.id === id))
+      .filter((a): a is GeneratedAsset => !!a)
+      .map(a => ({ path: a.path, name: a.name }))
+
+    const res = await window.controlAPI.exportBatchAssetPackage(items)
+    if (res.ok) {
+      alert(`批量导出成功：${res.path}\n\n共 ${res.count} 个动作。`)
+    } else if (res.error !== '用户取消') {
+      alert(`批量导出失败：${res.error}`)
+    }
+  }, [selectedActionIds, assets])
+
   // 批量删除
   const handleBatchDelete = useCallback(async () => {
     if (selectedActionIds.length === 0) return
@@ -1154,6 +1170,20 @@ export function App() {
                 <span style={{ fontSize: 12, color: '#4a90d9', fontWeight: 600 }}>已选择 {selectedActionIds.length} 个动作</span>
                 <button onClick={handleSelectAll} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>全选</button>
                 <button onClick={handleDeselectAll} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>取消选择</button>
+                <button
+                  onClick={handleBatchExport}
+                  disabled={selectedActionIds.length === 0}
+                  style={{
+                    padding: '2px 8px', fontSize: 11,
+                    cursor: selectedActionIds.length === 0 ? 'not-allowed' : 'pointer',
+                    backgroundColor: selectedActionIds.length === 0 ? '#ccc' : '#1677ff',
+                    color: selectedActionIds.length === 0 ? '#999' : '#fff',
+                    border: 'none', borderRadius: 3,
+                  }}
+                  title={selectedActionIds.length === 0 ? '请先选择要导出的动作' : `导出选中的 ${selectedActionIds.length} 个动作为一个 zip 包`}
+                >
+                  批量导出
+                </button>
                 <button
                   onClick={handleBatchDelete}
                   disabled={selectedActionIds.length === 0}

@@ -195,6 +195,9 @@ contextBridge.exposeInMainWorld('controlAPI', {
   exportAssetPackage: (path: string, name: string): Promise<{ ok: boolean; path?: string; error?: string }> => {
     return ipcRenderer.invoke(IPC_CHANNELS.EXPORT_ASSET_PACKAGE, { path, name })
   },
+  exportBatchAssetPackage: (items: Array<{ path: string; name: string }>): Promise<{ ok: boolean; path?: string; count?: number; error?: string }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.EXPORT_BATCH_ASSET_PACKAGE, { items })
+  },
   importAssetPackage: (): Promise<{
     ok: boolean; dirName?: string; name?: string; error?: string;
     batch?: boolean; results?: Array<{ file: string; ok: boolean; name?: string; error?: string }>;

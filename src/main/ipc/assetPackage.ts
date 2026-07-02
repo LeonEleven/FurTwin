@@ -71,6 +71,74 @@ export function setupAssetPackage(): void {
     }
   })
 
+  // ─── Batch Export ─────────────────────────────────────
+  ipcMain.handle(IPC_CHANNELS.EXPORT_BATCH_ASSET_PACKAGE, async (_event, payload: { items: Array<{ path: string; name: string }> }) => {
+    if (!payload?.items || payload.items.length === 0) return { ok: false, error: '没有选中动作' }
+
+    // Show save dialog
+    const result = await dialog.showSaveDialog({
+      title: '批量导出动作包',
+      defaultPath: 'batch-actions.zip',
+      filters: [{ name: '动作包', extensions: ['zip'] }],
+    })
+    if (result.canceled || !result.filePath) return { ok: false, error: '用户取消' }
+
+    try {
+      const zip = new JSZip()
+      const usedDirs = new Set<string>()
+      let totalFrames = 0
+
+      for (const item of payload.items) {
+        const assetDir = item.path
+        if (!existsSync(assetDir)) continue
+
+        // Create safe subdirectory name: sanitized name + short id
+        const safeName = item.name.replace(/[\\/:*?"<>|\s]/g, '_').substring(0, 20)
+        const dirId = basename(assetDir).substring(0, 8)
+        let subDir = `${safeName}_${dirId}`
+        // Ensure unique
+        let counter = 1
+        while (usedDirs.has(subDir)) {
+          subDir = `${safeName}_${dirId}_${counter}`
+          counter++
+        }
+        usedDirs.add(subDir)
+
+        const files = readdirSync(assetDir)
+        let hasMetadata = false
+
+        for (const file of files) {
+          const filePath = join(assetDir, file)
+          if (file === METADATA_FILE) {
+            hasMetadata = true
+          } else if (!file.endsWith('.png') && !file.endsWith('.webp')) {
+            continue
+          }
+
+          if (file.endsWith('.png') || file.endsWith('.webp')) {
+            totalFrames++
+          }
+
+          const data = readFileSync(filePath)
+          zip.file(`${subDir}/${file}`, data)
+        }
+
+        if (!hasMetadata) {
+          console.warn(`[assetPackage] skipping ${item.name}: missing metadata`)
+        }
+      }
+
+      const content = await zip.generateAsync({ type: 'nodebuffer' })
+      writeFileSync(result.filePath, content)
+
+      console.log(`[assetPackage] batch exported: ${result.filePath} (${payload.items.length} actions, ${totalFrames} frames)`)
+      return { ok: true, path: result.filePath, count: payload.items.length }
+    } catch (e) {
+      console.warn('[assetPackage] batch export failed:', e)
+      return { ok: false, error: String(e) }
+    }
+  })
+
   // ─── Import ───────────────────────────────────────────
 
   /**
@@ -143,6 +211,109 @@ export function setupAssetPackage(): void {
     }
   }
 
+  /**
+   * Import a batch package (zip with multiple subdirectories, each containing an action).
+   * Scans first-level subdirectories for asset-metadata.json.
+   */
+  async function importBatchPackage(zipPath: string): Promise<{
+    ok: boolean; batch?: boolean;
+    results?: Array<{ file: string; ok: boolean; name?: string; error?: string }>;
+    succeeded?: number; failed?: number;
+  }> {
+    try {
+      const zipData = readFileSync(zipPath)
+      const zip = await JSZip.loadAsync(zipData)
+
+      // Group entries by first-level directory
+      const dirMap = new Map<string, { metadata?: JSZip.JSZipObject; frames: JSZip.JSZipObject[] }>()
+
+      zip.forEach((path, entry) => {
+        const parts = path.split('/')
+        if (parts.length < 2) return // skip root-level files
+        const dirName = parts[0]
+        const fileName = parts.slice(1).join('/')
+
+        if (!dirMap.has(dirName)) {
+          dirMap.set(dirName, { frames: [] })
+        }
+        const dir = dirMap.get(dirName)!
+
+        if (fileName === METADATA_FILE) {
+          dir.metadata = entry
+        } else if (fileName.endsWith('.png') || fileName.endsWith('.webp')) {
+          dir.frames.push(entry)
+        }
+      })
+
+      // Filter directories that have metadata
+      const actionDirs = Array.from(dirMap.entries()).filter(([_, dir]) => dir.metadata)
+
+      if (actionDirs.length === 0) {
+        return { ok: false, results: [{ file: basename(zipPath), ok: false, error: 'zip 中没有找到动作包' }] }
+      }
+
+      const results: Array<{ file: string; ok: boolean; name?: string; error?: string }> = []
+
+      for (const [dirName, dir] of actionDirs) {
+        try {
+          // Parse metadata
+          const metadataText = await dir.metadata!.async('string')
+          let meta: Record<string, any>
+          try {
+            meta = JSON.parse(metadataText)
+          } catch {
+            results.push({ file: dirName, ok: false, error: 'asset-metadata.json 格式无效' })
+            continue
+          }
+
+          // Force isDefault to false on import
+          meta.isDefault = false
+
+          // Create new asset directory
+          const newId = createGeneratedActionId()
+          const newDir = getUserGeneratedActionDir(newId)
+          mkdirSync(newDir, { recursive: true })
+
+          // Write metadata
+          writeFileSync(join(newDir, METADATA_FILE), JSON.stringify(meta, null, 2), 'utf-8')
+
+          // Extract frames
+          for (const entry of dir.frames) {
+            const name = basename(entry.name)
+            const data = await entry.async('nodebuffer')
+            writeFileSync(join(newDir, name), data)
+          }
+
+          // Validate
+          const info = loadAssetInfo(newDir, newId)
+          if (!info) {
+            try { rmSync(newDir, { recursive: true, force: true }) } catch { /* cleanup */ }
+            results.push({ file: dirName, ok: false, error: '导入后验证失败' })
+            continue
+          }
+
+          console.log(`[assetPackage] imported from batch: ${newDir} (${dir.frames.length} frames, name="${info.name}")`)
+          results.push({ file: dirName, ok: true, name: info.name })
+        } catch (e) {
+          results.push({ file: dirName, ok: false, error: String(e) })
+        }
+      }
+
+      const succeeded = results.filter(r => r.ok)
+      const failed = results.filter(r => !r.ok)
+      return {
+        ok: succeeded.length > 0,
+        batch: true,
+        results,
+        succeeded: succeeded.length,
+        failed: failed.length,
+      }
+    } catch (e) {
+      console.warn('[assetPackage] batch import failed:', e)
+      return { ok: false, results: [{ file: basename(zipPath), ok: false, error: String(e) }] }
+    }
+  }
+
   ipcMain.handle(IPC_CHANNELS.IMPORT_ASSET_PACKAGE, async () => {
     // Show open dialog — supports multi-select
     const result = await dialog.showOpenDialog({
@@ -152,27 +323,43 @@ export function setupAssetPackage(): void {
     })
     if (result.canceled || result.filePaths.length === 0) return { ok: false, error: '用户取消' }
 
-    // Single file: preserve original return shape
-    if (result.filePaths.length === 1) {
-      return importSinglePackage(result.filePaths[0])
-    }
+    // For each file, detect if it's a single or batch package
+    const allResults: Array<{ file: string; ok: boolean; name?: string; error?: string }> = []
 
-    // Multiple files: import each and collect results
-    const results: Array<{ file: string; ok: boolean; name?: string; error?: string }> = []
     for (const filePath of result.filePaths) {
-      const res = await importSinglePackage(filePath)
-      results.push({ file: basename(filePath), ...res })
+      // Quick detection: check if root has metadata
+      try {
+        const zipData = readFileSync(filePath)
+        const zip = await JSZip.loadAsync(zipData)
+        const hasRootMetadata = zip.file(METADATA_FILE) !== null
+
+        if (hasRootMetadata) {
+          // Single action package
+          const res = await importSinglePackage(filePath)
+          allResults.push({ file: basename(filePath), ...res })
+        } else {
+          // Try batch package (multiple subdirectories)
+          const res = await importBatchPackage(filePath)
+          if (res.results) {
+            allResults.push(...res.results)
+          } else {
+            allResults.push({ file: basename(filePath), ok: false, error: '无法识别的 zip 格式' })
+          }
+        }
+      } catch (e) {
+        allResults.push({ file: basename(filePath), ok: false, error: String(e) })
+      }
     }
 
-    const succeeded = results.filter(r => r.ok)
-    const failed = results.filter(r => !r.ok)
+    const succeeded = allResults.filter(r => r.ok)
+    const failed = allResults.filter(r => !r.ok)
     const summary = `成功 ${succeeded.length} 个，失败 ${failed.length} 个`
 
-    console.log(`[assetPackage] batch import: ${summary}`)
+    console.log(`[assetPackage] import: ${summary}`)
     return {
       ok: succeeded.length > 0,
-      batch: true,
-      results,
+      batch: result.filePaths.length > 1 || allResults.length > 1,
+      results: allResults,
       succeeded: succeeded.length,
       failed: failed.length,
       summary,
