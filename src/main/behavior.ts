@@ -472,16 +472,18 @@ export function toggleAutoBehavior(enabled: boolean): void {
     clearTimeout(autoTimer)
     autoTimer = null
   }
-  isAutoPlaying = false
   pauseUntil = 0  // Clear any pending manual pause
 
   if (enabled) {
     // Resume: play idle and schedule next with firstDelaySec
+    isAutoPlaying = false
     const p = getParams()
     playIdle()
     scheduleNext(p.firstDelaySec * 1000)
+  } else {
+    // Disable: stop auto-playing and switch to idle fallback
+    playIdle()
   }
-  // If disabling, just stop (already cleared above)
 
   notifyControlPanel()
 }
