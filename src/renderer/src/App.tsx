@@ -871,6 +871,9 @@ export function App() {
               <li>生成视频后保存到本地</li>
               <li>回到「提取视频」Tab，选择视频进行提取</li>
             </ol>
+            <p style={{ margin: '8px 0 0', padding: '6px 8px', backgroundColor: '#fff7e6', borderRadius: 4, border: '1px solid #ffe0b2', color: '#e65100', fontSize: 11, lineHeight: 1.6 }}>
+              💡 <strong>建议：</strong>复制提示词到豆包网页端 / App 前，建议先上传宠物的<strong>正面全身照</strong>，尽量保证宠物完整入镜、无遮挡，再粘贴提示词生成视频。这样更容易生成完整、稳定、适合循环播放的绿幕动作视频。
+            </p>
           </div>
         </div>
       )}
