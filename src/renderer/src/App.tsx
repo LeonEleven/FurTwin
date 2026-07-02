@@ -601,6 +601,30 @@ export function App() {
     setSelectedActionIds([])
   }, [])
 
+  // 批量删除
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedActionIds.length === 0) return
+    const count = selectedActionIds.length
+    if (!confirm(`确定要删除选中的 ${count} 个动作吗？\n\n此操作不可恢复。`)) return
+
+    let failed = 0
+    for (const id of selectedActionIds) {
+      const asset = assets.find(a => a.id === id)
+      if (!asset) continue
+      const res = await window.controlAPI.deleteAsset(asset.path)
+      if (!res.ok) failed++
+    }
+
+    if (failed > 0) {
+      alert(`批量删除完成，${failed} 个动作删除失败。`)
+    }
+
+    // 刷新动作库并退出批量模式
+    refreshAssets()
+    setSelectedActionIds([])
+    setBatchMode(false)
+  }, [selectedActionIds, assets, refreshAssets])
+
   // UI uses visual direction: positive X = right, positive Y = down
   // Internal anchorOffset is opposite: positive moves anchor right → window moves left → pet moves left
   // Conversion: internal = -visual
@@ -1130,6 +1154,20 @@ export function App() {
                 <span style={{ fontSize: 12, color: '#4a90d9', fontWeight: 600 }}>已选择 {selectedActionIds.length} 个动作</span>
                 <button onClick={handleSelectAll} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>全选</button>
                 <button onClick={handleDeselectAll} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>取消选择</button>
+                <button
+                  onClick={handleBatchDelete}
+                  disabled={selectedActionIds.length === 0}
+                  style={{
+                    padding: '2px 8px', fontSize: 11,
+                    cursor: selectedActionIds.length === 0 ? 'not-allowed' : 'pointer',
+                    backgroundColor: selectedActionIds.length === 0 ? '#ccc' : '#f44336',
+                    color: selectedActionIds.length === 0 ? '#999' : '#fff',
+                    border: 'none', borderRadius: 3,
+                  }}
+                  title={selectedActionIds.length === 0 ? '请先选择要删除的动作' : `删除选中的 ${selectedActionIds.length} 个动作`}
+                >
+                  批量删除
+                </button>
                 <button onClick={handleExitBatchMode} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>退出批量选择</button>
               </>
             )}
