@@ -90,6 +90,7 @@ export function showControlPanel() {
   }
   controlPanel.show()
   controlPanel.focus()
+  controlPanel.webContents.send(IPC_CHANNELS.CONTROL_PANEL_SHOWN)
 }
 
 export function hideControlPanel() {

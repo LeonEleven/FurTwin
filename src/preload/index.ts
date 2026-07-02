@@ -232,4 +232,10 @@ contextBridge.exposeInMainWorld('controlAPI', {
     ipcRenderer.on(IPC_CHANNELS.AUTO_PLAYING_CHANGED, handler)
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.AUTO_PLAYING_CHANGED, handler) }
   },
+  // --- 控制面板窗口显示事件 ---
+  onControlPanelShown: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC_CHANNELS.CONTROL_PANEL_SHOWN, handler)
+    return () => { ipcRenderer.removeListener(IPC_CHANNELS.CONTROL_PANEL_SHOWN, handler) }
+  },
 })

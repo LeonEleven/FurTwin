@@ -66,6 +66,10 @@ export function App() {
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [activeTab, setActiveTab] = useState<'actions' | 'get-video' | 'extract' | 'behavior'>('actions')
 
+  // 批量选择模式
+  const [batchMode, setBatchMode] = useState(false)
+  const [selectedActionIds, setSelectedActionIds] = useState<string[]>([])
+
   // 提示词生成器 state
   const [promptOptions, setPromptOptions] = useState({
     ratio: '16:9', duration: '5', fixedCamera: true,
@@ -139,6 +143,15 @@ export function App() {
   useEffect(() => {
     const off = window.petAPI.onStealthModeChanged((enabled) => {
       setStealthMode(enabled)
+    })
+    return off
+  }, [])
+
+  // 控制面板重新显示时，重置批量选择状态
+  useEffect(() => {
+    const off = window.controlAPI.onControlPanelShown(() => {
+      setBatchMode(false)
+      setSelectedActionIds([])
     })
     return off
   }, [])
@@ -554,6 +567,40 @@ export function App() {
     window.controlAPI.toggleAutoBehavior(newVal)
   }, [autoBehaviorEnabled])
 
+  // 批量选择相关 handler
+  const handleEnterBatchMode = useCallback(() => {
+    setBatchMode(true)
+    setSelectedActionIds([])
+  }, [])
+
+  const handleExitBatchMode = useCallback(() => {
+    setBatchMode(false)
+    setSelectedActionIds([])
+  }, [])
+
+  // Type filter: counts and filtered list (moved before handleSelectAll to avoid TDZ)
+  const typeCounts = ACTION_TYPES.reduce<Record<string, number>>((acc, t) => {
+    acc[t.value] = assets.filter(a => a.actionType === t.value).length
+    return acc
+  }, {})
+  const filteredAssets = typeFilter === 'all' ? assets : assets.filter(a => a.actionType === typeFilter)
+
+  const handleToggleActionSelect = useCallback((actionId: string) => {
+    setSelectedActionIds(prev =>
+      prev.includes(actionId)
+        ? prev.filter(id => id !== actionId)
+        : [...prev, actionId]
+    )
+  }, [])
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedActionIds(filteredAssets.map(a => a.id))
+  }, [filteredAssets])
+
+  const handleDeselectAll = useCallback(() => {
+    setSelectedActionIds([])
+  }, [])
+
   // UI uses visual direction: positive X = right, positive Y = down
   // Internal anchorOffset is opposite: positive moves anchor right → window moves left → pet moves left
   // Conversion: internal = -visual
@@ -637,13 +684,6 @@ export function App() {
 
   // Check if there are any valid random candidates
   const hasRandomCandidates = assets.some(a => a.includeInRandom && a.actionType !== 'idle')
-
-  // Type filter: counts and filtered list
-  const typeCounts = ACTION_TYPES.reduce<Record<string, number>>((acc, t) => {
-    acc[t.value] = assets.filter(a => a.actionType === t.value).length
-    return acc
-  }, {})
-  const filteredAssets = typeFilter === 'all' ? assets : assets.filter(a => a.actionType === typeFilter)
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '6px 8px', border: '1px solid #ccc',
@@ -1077,9 +1117,22 @@ export function App() {
       <div style={{ padding: 12, backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 13, marginTop: 12, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxWidth: '100%', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <p style={{ fontWeight: 600, margin: 0 }}>动作库</p>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={handleImportAsset} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }} title="从 zip 动作包导入动作资源。">导入动作包</button>
-            <button onClick={refreshAssets} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }} title="重新扫描动作库。">刷新</button>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            {!batchMode && (
+              <>
+                <button onClick={handleImportAsset} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }} title="从 zip 动作包导入动作资源。">导入动作包</button>
+                <button onClick={refreshAssets} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }} title="重新扫描动作库。">刷新</button>
+                <button onClick={handleEnterBatchMode} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }} title="进入批量选择模式。">批量选择</button>
+              </>
+            )}
+            {batchMode && (
+              <>
+                <span style={{ fontSize: 12, color: '#4a90d9', fontWeight: 600 }}>已选择 {selectedActionIds.length} 个动作</span>
+                <button onClick={handleSelectAll} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>全选</button>
+                <button onClick={handleDeselectAll} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>取消选择</button>
+                <button onClick={handleExitBatchMode} style={{ padding: '2px 8px', fontSize: 11, cursor: 'pointer', backgroundColor: '#e0e0e0', border: 'none', borderRadius: 3 }}>退出批量选择</button>
+              </>
+            )}
           </div>
         </div>
         {assets.length === 0 && (
@@ -1142,6 +1195,15 @@ export function App() {
                 }}>
                   {/* 第一行：名称/重命名 + 类型下拉 + 状态标记 */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    {batchMode && (
+                      <input
+                        type="checkbox"
+                        checked={selectedActionIds.includes(asset.id)}
+                        onChange={() => handleToggleActionSelect(asset.id)}
+                        style={{ cursor: 'pointer', width: 16, height: 16, flexShrink: 0 }}
+                        title={selectedActionIds.includes(asset.id) ? '取消选择' : '选择此动作'}
+                      />
+                    )}
                     {isRenaming ? (
                       <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmRename(asset); if (e.key === 'Escape') handleCancelRename() }}
