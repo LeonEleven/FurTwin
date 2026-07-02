@@ -117,8 +117,8 @@
 
 | 文件/目录 | 用途 |
 |-----------|------|
-| `furtwin-0.1.0-setup.exe` | 安装版 |
-| `furtwin-0.1.0-win-unpacked.zip` | 免安装版 |
+| `furtwin-0.1.1-setup.exe` | 安装版 |
+| `furtwin-0.1.1-win-unpacked.zip` | 免安装版 |
 | `win-unpacked/` | 解压后的免安装版 |
 | `*.blockmap` | 增量更新用 |
 | `latest.yml` | 版本信息 |
