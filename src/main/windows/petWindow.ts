@@ -637,6 +637,8 @@ export function buildAppMenuTemplate(options?: {
   })
   items.push({ type: 'separator' })
   items.push({ label: '退出 FurTwin', click: () => { app.quit() } })
+  items.push({ type: 'separator' })
+  items.push({ label: `FurTwin v${app.getVersion()}`, enabled: false })
 
   return items
 }

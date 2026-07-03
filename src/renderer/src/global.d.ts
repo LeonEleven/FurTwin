@@ -139,6 +139,7 @@ declare global {
       saveBehaviorParams: (params: { firstDelaySec?: number; minIntervalSec?: number; maxIntervalSec?: number; manualPauseSec?: number }) => void
       getBehaviorState: () => Promise<{ enabled: boolean; params: { firstDelaySec: number; minIntervalSec: number; maxIntervalSec: number; manualPauseSec: number } }>
       onAutoPlayingChanged: (callback: (name: string | null) => void) => () => void
+      getAppVersion: () => Promise<string>
       onControlPanelShown: (callback: () => void) => () => void
     }
   }

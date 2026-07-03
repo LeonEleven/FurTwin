@@ -1,4 +1,5 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain } from 'electron'
+import { IPC_CHANNELS } from '../shared/types'
 import { createPetWindow, setupWindowResize, setupPetDrag, setupContextMenu } from './windows/petWindow'
 import { createControlPanel, setQuitting, showControlPanel } from './windows/controlPanel'
 import { createTray, destroyTray } from './tray'
@@ -52,6 +53,9 @@ app.whenReady().then(() => {
   setupGeneratedAssets()
   setupAssetPackage()
   setupActionLib()
+
+  // 应用版本号
+  ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => app.getVersion())
 
   // 行为系统（在所有 IPC 注册完成后初始化）
   setupBehaviorIPC()

@@ -33,7 +33,7 @@ export function createTray(): void {
   }
 
   tray = new Tray(icon)
-  tray.setToolTip('FurTwin')
+  tray.setToolTip(`FurTwin v${app.getVersion()}`)
 
   // Left click → toggle control panel
   tray.on('click', () => {

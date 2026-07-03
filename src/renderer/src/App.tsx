@@ -66,6 +66,7 @@ export function App() {
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'actions' | 'get-video' | 'extract' | 'behavior'>('actions')
+  const [appVersion, setAppVersion] = useState<string>('')
 
   // 批量选择模式
   const [batchMode, setBatchMode] = useState(false)
@@ -106,6 +107,11 @@ export function App() {
   useEffect(() => {
     refreshAssets()
   }, [refreshAssets, status])
+
+  // 获取应用版本号
+  useEffect(() => {
+    window.controlAPI.getAppVersion().then(v => setAppVersion(v)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const offLog = window.controlAPI.onExtractLog((log) => setLogs((prev) => prev + log))
@@ -753,7 +759,9 @@ export function App() {
     <div style={{ padding: '16px 24px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: '100%', margin: '0 auto', height: '100vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`.sort-btn:not(:disabled):hover { background-color: #0958d9 !important; }`}</style>
       <h1 style={{ fontSize: 20, marginBottom: 4 }}>FurTwin</h1>
-      <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>FFmpeg 绿幕视频 → 透明序列帧</p>
+      <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>
+        {appVersion ? `v${appVersion} · ` : ''}FFmpeg 绿幕视频 → 透明序列帧
+      </p>
 
       {/* Tab 导航 */}
       <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '2px solid #e0e0e0', paddingBottom: 0 }}>

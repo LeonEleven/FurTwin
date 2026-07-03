@@ -239,6 +239,10 @@ contextBridge.exposeInMainWorld('controlAPI', {
     ipcRenderer.on(IPC_CHANNELS.AUTO_PLAYING_CHANGED, handler)
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.AUTO_PLAYING_CHANGED, handler) }
   },
+  // --- 应用版本号 ---
+  getAppVersion: (): Promise<string> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION)
+  },
   // --- 控制面板窗口显示事件 ---
   onControlPanelShown: (callback: () => void) => {
     const handler = () => callback()
