@@ -1,6 +1,6 @@
 {
   "name": "furtwin",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "桌面宠物软件 - FurTwin",
   "author": "LeonEleven",
   "main": "./out/main/index.js",
