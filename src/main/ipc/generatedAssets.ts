@@ -66,6 +66,23 @@ export function setupGeneratedAssets(): void {
       return deleteResult
     }
 
+    // Clean up customActionOrder: remove deleted action ID
+    try {
+      if (existsSync(localConfigPath)) {
+        const config = JSON.parse(readFileSync(localConfigPath, 'utf-8'))
+        if (Array.isArray(config.customActionOrder)) {
+          const idx = config.customActionOrder.indexOf(deletedDirName)
+          if (idx !== -1) {
+            config.customActionOrder.splice(idx, 1)
+            writeFileSync(localConfigPath, JSON.stringify(config, null, 2), 'utf-8')
+            console.log(`[generated] removed "${deletedDirName}" from customActionOrder`)
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[generated] failed to clean customActionOrder:', e)
+    }
+
     // If not the active asset, we're done
     if (!wasActive) {
       return { ok: true }
@@ -206,6 +223,67 @@ export function setupGeneratedAssets(): void {
       const rebuilt = rebuildAssetAnchor(payload.path, payload.dirName)
       return { ok: true, rebuilt }
     } catch (e) {
+      return { ok: false, error: String(e) }
+    }
+  })
+
+  // 手动排序：上移/下移
+  ipcMain.handle(IPC_CHANNELS.MOVE_ACTION, (_event, payload: { actionId: string; direction: 'up' | 'down' }) => {
+    if (!payload?.actionId || !['up', 'down'].includes(payload.direction)) {
+      return { ok: false, error: '参数无效' }
+    }
+
+    const { actionId, direction } = payload
+    const configPath = getRuntimeLocalConfigPath()
+
+    try {
+      // Read or initialize customActionOrder
+      let config: Record<string, any> = {}
+      if (existsSync(configPath)) {
+        config = JSON.parse(readFileSync(configPath, 'utf-8'))
+      }
+
+      // Get current valid action IDs (from scanAllActions without custom order)
+      // We need the raw scan to get all current IDs
+      const allEntries = scanAllActions()
+      const validIds = new Set(allEntries.map(e => e.id))
+
+      // Initialize customActionOrder from current scan if missing or empty
+      if (!Array.isArray(config.customActionOrder) || config.customActionOrder.length === 0) {
+        config.customActionOrder = allEntries.map(e => e.id)
+      } else {
+        // Clean up stale IDs
+        config.customActionOrder = config.customActionOrder.filter((id: string) => validIds.has(id))
+        // Append any new IDs not in the order
+        const orderedSet = new Set(config.customActionOrder)
+        for (const entry of allEntries) {
+          if (!orderedSet.has(entry.id)) {
+            config.customActionOrder.push(entry.id)
+          }
+        }
+      }
+
+      const order: string[] = config.customActionOrder
+      const idx = order.indexOf(actionId)
+      if (idx === -1) {
+        return { ok: false, error: '动作不在排序列表中' }
+      }
+
+      if (direction === 'up' && idx === 0) {
+        return { ok: false, error: '已经是第一个，无法上移' }
+      }
+      if (direction === 'down' && idx === order.length - 1) {
+        return { ok: false, error: '已经是最后一个，无法下移' }
+      }
+
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+      ;[order[idx], order[swapIdx]] = [order[swapIdx], order[idx]]
+
+      writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+      console.log(`[generated] moved "${actionId}" ${direction}, new order: ${order.join(', ')}`)
+      return { ok: true }
+    } catch (e) {
+      console.warn('[generated] move action failed:', e)
       return { ok: false, error: String(e) }
     }
   })

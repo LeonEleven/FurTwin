@@ -123,6 +123,7 @@ declare global {
         triggerOnClick?: boolean
       }) => void
       setDefaultAsset: (path: string) => void
+      moveAction: (actionId: string, direction: 'up' | 'down') => Promise<{ ok: boolean; error?: string }>
       rebuildAnchor: (path: string, dirName: string) => Promise<{ ok: boolean; rebuilt?: boolean; error?: string }>
       exportAssetPackage: (path: string, name: string) => Promise<{ ok: boolean; path?: string; error?: string }>
       exportBatchAssetPackage: (items: Array<{ path: string; name: string }>) => Promise<{ ok: boolean; path?: string; count?: number; error?: string }>

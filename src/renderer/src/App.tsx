@@ -64,6 +64,7 @@ export function App() {
   const [autoPlayingName, setAutoPlayingName] = useState<string | null>(null)
   const [expandingAnchorId, setExpandingAnchorId] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState<string>('')
   const [activeTab, setActiveTab] = useState<'actions' | 'get-video' | 'extract' | 'behavior'>('actions')
 
   // 批量选择模式
@@ -583,7 +584,14 @@ export function App() {
     acc[t.value] = assets.filter(a => a.actionType === t.value).length
     return acc
   }, {})
-  const filteredAssets = typeFilter === 'all' ? assets : assets.filter(a => a.actionType === typeFilter)
+  const typeFilteredAssets = typeFilter === 'all' ? assets : assets.filter(a => a.actionType === typeFilter)
+  const filteredAssets = searchQuery.trim()
+    ? typeFilteredAssets.filter(a => a.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : typeFilteredAssets
+  // Whether the current type tab itself has no actions (for empty state distinction)
+  const typeHasNoActions = typeFilteredAssets.length === 0
+  // Whether we can show move buttons (all tab, no search, no batch mode)
+  const canSort = typeFilter === 'all' && searchQuery.trim() === '' && !batchMode
 
   const handleToggleActionSelect = useCallback((actionId: string) => {
     setSelectedActionIds(prev =>
@@ -640,6 +648,14 @@ export function App() {
     setSelectedActionIds([])
     setBatchMode(false)
   }, [selectedActionIds, assets, refreshAssets])
+
+  // 手动排序：上移/下移
+  const handleMoveAction = useCallback(async (actionId: string, direction: 'up' | 'down') => {
+    const res = await window.controlAPI.moveAction(actionId, direction)
+    if (res.ok) {
+      refreshAssets()
+    }
+  }, [refreshAssets])
 
   // UI uses visual direction: positive X = right, positive Y = down
   // Internal anchorOffset is opposite: positive moves anchor right → window moves left → pet moves left
@@ -735,6 +751,7 @@ export function App() {
 
   return (
     <div style={{ padding: '16px 24px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: '100%', margin: '0 auto', height: '100vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <style>{`.sort-btn:not(:disabled):hover { background-color: #0958d9 !important; }`}</style>
       <h1 style={{ fontSize: 20, marginBottom: 4 }}>FurTwin</h1>
       <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>FFmpeg 绿幕视频 → 透明序列帧</p>
 
@@ -1237,13 +1254,26 @@ export function App() {
               )
             })}
           </div>
+          {/* 搜索框 */}
+          <div style={{ marginBottom: 8 }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索动作名称…"
+              style={{
+                width: '100%', padding: '4px 8px', fontSize: 12, border: '1px solid #ccc', borderRadius: 3,
+                outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+          </div>
           <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
             {filteredAssets.length === 0 && (
               <p style={{ margin: 0, color: '#888', fontSize: 12, padding: '12px 0', textAlign: 'center' }}>
-                当前类型下暂无动作。
+                {typeHasNoActions ? '当前类型下暂无动作。' : '没有匹配的动作，请调整搜索关键词。'}
               </p>
             )}
-            {filteredAssets.map((asset) => {
+            {filteredAssets.map((asset, assetIndex) => {
               const date = new Date(asset.modifiedAt)
               const timeStr = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
               const isRenaming = renamingId === asset.id
@@ -1350,6 +1380,36 @@ export function App() {
                       </>
                     ) : (
                       <>
+                        {/* 排序按钮 */}
+                        {canSort && (
+                          <>
+                            <button
+                              onClick={() => handleMoveAction(asset.id, 'up')}
+                              disabled={assetIndex === 0}
+                              className={assetIndex === 0 ? undefined : 'sort-btn'}
+                              style={{
+                                padding: '3px 6px', fontSize: 11, borderRadius: 3, border: 'none',
+                                backgroundColor: assetIndex === 0 ? '#e0e0e0' : '#1677ff',
+                                color: assetIndex === 0 ? '#999' : '#fff',
+                                cursor: assetIndex === 0 ? 'not-allowed' : 'pointer',
+                              }}
+                              title="上移"
+                            >↑</button>
+                            <button
+                              onClick={() => handleMoveAction(asset.id, 'down')}
+                              disabled={assetIndex === filteredAssets.length - 1}
+                              className={assetIndex === filteredAssets.length - 1 ? undefined : 'sort-btn'}
+                              style={{
+                                padding: '3px 6px', fontSize: 11, borderRadius: 3, border: 'none',
+                                backgroundColor: assetIndex === filteredAssets.length - 1 ? '#e0e0e0' : '#1677ff',
+                                color: assetIndex === filteredAssets.length - 1 ? '#999' : '#fff',
+                                cursor: assetIndex === filteredAssets.length - 1 ? 'not-allowed' : 'pointer',
+                              }}
+                              title="下移"
+                            >↓</button>
+                            <span style={{ borderLeft: '1px solid #e0e0e0', height: 14, margin: '0 2px' }} />
+                          </>
+                        )}
                         {/* 主操作 */}
                         <button onClick={() => handleApplyAsset(asset)} style={btnStyle('#4caf50')} title="将此动作设为当前使用动作，并立即播放。">应用</button>
                         <span style={{ borderLeft: '1px solid #e0e0e0', height: 14, margin: '0 2px' }} />

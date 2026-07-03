@@ -188,6 +188,10 @@ contextBridge.exposeInMainWorld('controlAPI', {
   setDefaultAsset: (path: string) => {
     ipcRenderer.send(IPC_CHANNELS.SET_DEFAULT_ASSET, { path })
   },
+  // --- 手动排序 ---
+  moveAction: (actionId: string, direction: 'up' | 'down'): Promise<{ ok: boolean; error?: string }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.MOVE_ACTION, { actionId, direction })
+  },
   rebuildAnchor: (path: string, dirName: string): Promise<{ ok: boolean; rebuilt?: boolean; error?: string }> => {
     return ipcRenderer.invoke(IPC_CHANNELS.REBUILD_ANCHOR, { path, dirName })
   },

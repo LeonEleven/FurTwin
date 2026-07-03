@@ -13,7 +13,7 @@
 import { existsSync, readdirSync, statSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join, resolve, relative, isAbsolute } from 'path'
 import { loadAssetInfo, getActiveAssetId, toFramesDir, computeDisplayAnchor, type AssetInfo } from '../utils/assetInfo'
-import { getGeneratedDir, getPublicDir, getAssetMetadataPath, getUserGeneratedDir, toUserDataProtocolUrl } from './actionPaths'
+import { getGeneratedDir, getPublicDir, getAssetMetadataPath, getUserGeneratedDir, toUserDataProtocolUrl, getRuntimeLocalConfigPath } from './actionPaths'
 import { toBundledProtocolUrl } from './userDataProtocol'
 import { app } from 'electron'
 
@@ -95,8 +95,35 @@ export function scanAllActions(): ActionEntry[] {
   // Merge bundled + user
   const allActions = [...bundledActions, ...userActions]
 
-  // Sort by modifiedAt descending (newest first)
+  // Sort by modifiedAt descending (newest first) as default
   allActions.sort((a, b) => b.modifiedAt - a.modifiedAt)
+
+  // Apply custom order if present in local.config.json
+  try {
+    const configPath = getRuntimeLocalConfigPath()
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, 'utf-8'))
+      if (Array.isArray(config.customActionOrder) && config.customActionOrder.length > 0) {
+        const idToEntry = new Map(allActions.map(e => [e.id, e]))
+        const ordered: ActionEntry[] = []
+        // Follow customActionOrder for IDs that still exist
+        for (const id of config.customActionOrder) {
+          const entry = idToEntry.get(id)
+          if (entry) {
+            ordered.push(entry)
+            idToEntry.delete(id)
+          }
+        }
+        // Append remaining new actions (not in customActionOrder) at the end, mtime desc
+        const remaining = [...idToEntry.values()]
+        remaining.sort((a, b) => b.modifiedAt - a.modifiedAt)
+        ordered.push(...remaining)
+        return ordered
+      }
+    }
+  } catch {
+    // Config read error — fall back to default mtime sort
+  }
 
   return allActions
 }
