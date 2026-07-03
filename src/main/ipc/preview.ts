@@ -86,7 +86,8 @@ export function restoreDemo(): void {
 
 /**
  * Startup validation: check if local.config.json references a valid asset.
- * If the frames directory is missing or has no frames, delete the config
+ * If the frames directory is missing or has no frames, strip action-specific
+ * fields but preserve user config (customActionOrder, behavior params, etc.)
  * so the pet falls back to the default demo animation.
  */
 export function validateStartupConfig(): void {
@@ -103,8 +104,8 @@ export function validateStartupConfig(): void {
       try { writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8') } catch {}
     }
     if (!framesDir) {
-      console.log('[preview] startup: empty framesDir, deleting local.config.json')
-      deleteLocalConfig()
+      console.log('[preview] startup: empty framesDir, stripping action fields')
+      stripActionFields()
       return
     }
 
@@ -117,8 +118,8 @@ export function validateStartupConfig(): void {
         const actionId = match[1]
         absDir = join(getUserGeneratedDir(), actionId)
       } else {
-        console.log(`[preview] startup: invalid userData protocol URL (${framesDir}), deleting local.config.json`)
-        deleteLocalConfig()
+        console.log(`[preview] startup: invalid userData protocol URL (${framesDir}), stripping action fields`)
+        stripActionFields()
         return
       }
     } else if (isBundledProtocolUrl(framesDir)) {
@@ -127,8 +128,8 @@ export function validateStartupConfig(): void {
       if (match) {
         absDir = join(process.resourcesPath, 'assets', match[1])
       } else {
-        console.log(`[preview] startup: invalid bundled protocol URL (${framesDir}), deleting local.config.json`)
-        deleteLocalConfig()
+        console.log(`[preview] startup: invalid bundled protocol URL (${framesDir}), stripping action fields`)
+        stripActionFields()
         return
       }
     } else {
@@ -137,22 +138,54 @@ export function validateStartupConfig(): void {
     }
 
     if (!existsSync(absDir)) {
-      console.log(`[preview] startup: frames dir missing (${absDir}), deleting local.config.json`)
-      deleteLocalConfig()
+      console.log(`[preview] startup: frames dir missing (${absDir}), stripping action fields`)
+      stripActionFields()
       return
     }
 
     const hasFrames = readdirSync(absDir).some(f => f.endsWith('.png') || f.endsWith('.webp'))
     if (!hasFrames) {
-      console.log(`[preview] startup: no frames in ${absDir}, deleting local.config.json`)
-      deleteLocalConfig()
+      console.log(`[preview] startup: no frames in ${absDir}, stripping action fields`)
+      stripActionFields()
       return
     }
 
     console.log(`[preview] startup: local.config.json valid, framesDir=${framesDir}`)
   } catch {
-    console.log('[preview] startup: failed to parse local.config.json, deleting')
-    deleteLocalConfig()
+    console.log('[preview] startup: failed to parse local.config.json, stripping action fields')
+    stripActionFields()
+  }
+}
+
+/**
+ * Remove action-specific fields from local.config.json while preserving
+ * user config: customActionOrder, behavior params, etc.
+ */
+function stripActionFields(): void {
+  if (!existsSync(LOCAL_CONFIG_PATH)) return
+  try {
+    const config = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+    // Fields to remove (action/preview specific)
+    const actionFields = [
+      'framesDir', 'name', 'label', 'fps', 'scale', 'displayScale',
+      'loop', 'frameCount', 'frameWidth', 'frameHeight', 'framePattern',
+      'anchorX', 'anchorY',
+    ]
+    for (const field of actionFields) {
+      delete config[field]
+    }
+    // If nothing meaningful remains, delete the file
+    const meaningfulKeys = Object.keys(config).filter(k => k !== 'framesDir')
+    if (meaningfulKeys.length === 0) {
+      unlinkSync(LOCAL_CONFIG_PATH)
+      console.log('[preview] stripped action fields, config now empty, deleted file')
+    } else {
+      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+      console.log(`[preview] stripped action fields, preserved: ${meaningfulKeys.join(', ')}`)
+    }
+  } catch {
+    // If we can't parse/modify, leave it alone rather than delete
+    console.warn('[preview] failed to strip action fields, leaving config unchanged')
   }
 }
 
@@ -232,6 +265,7 @@ export function setupPreview(): void {
           autoBehaviorMinIntervalSec: existingConfig.autoBehaviorMinIntervalSec,
           autoBehaviorMaxIntervalSec: existingConfig.autoBehaviorMaxIntervalSec,
           autoBehaviorManualPauseSec: existingConfig.autoBehaviorManualPauseSec,
+          customActionOrder: existingConfig.customActionOrder,
         }
         writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
         console.log(`[preview] write local.config scale=${config.scale} displayScale=${config.displayScale}`)

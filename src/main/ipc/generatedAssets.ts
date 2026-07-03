@@ -121,6 +121,7 @@ export function setupGeneratedAssets(): void {
         autoBehaviorMinIntervalSec: existingConfig.autoBehaviorMinIntervalSec,
         autoBehaviorMaxIntervalSec: existingConfig.autoBehaviorMaxIntervalSec,
         autoBehaviorManualPauseSec: existingConfig.autoBehaviorManualPauseSec,
+        customActionOrder: existingConfig.customActionOrder,
       }
       writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
       console.log(`[generated] deleted active, switched to fallback: "${config.name}" (id=${fallback.id})`)
@@ -191,7 +192,17 @@ export function setupGeneratedAssets(): void {
               frameHeight: info.frameHeight, framePattern: `{}.${info.format}`,
               anchorX: anchor?.anchorX, anchorY: anchor?.anchorY,
             }
-            writeFileSync(getRuntimeLocalConfigPath(), JSON.stringify(config, null, 2), 'utf-8')
+            // Preserve customActionOrder from existing config
+            const configPath = getRuntimeLocalConfigPath()
+            try {
+              if (existsSync(configPath)) {
+                const existing = JSON.parse(readFileSync(configPath, 'utf-8'))
+                if (existing.customActionOrder) {
+                  config.customActionOrder = existing.customActionOrder
+                }
+              }
+            } catch {}
+            writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
             // Send config directly to pet (not RELOAD_ANIM which re-fetches from file)
             BrowserWindow.getAllWindows().forEach(win => {
               if (!win.isDestroyed()) {

@@ -84,6 +84,7 @@ export function setupActionLib(): void {
         autoBehaviorMinIntervalSec: existingConfig.autoBehaviorMinIntervalSec,
         autoBehaviorMaxIntervalSec: existingConfig.autoBehaviorMaxIntervalSec,
         autoBehaviorManualPauseSec: existingConfig.autoBehaviorManualPauseSec,
+        customActionOrder: existingConfig.customActionOrder,
       }
       writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
       console.log('[actionLib] local.config.json updated')
