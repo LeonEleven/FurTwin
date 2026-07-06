@@ -1,18 +1,31 @@
 # FurTwin 发布后维护记录
 
-## 1. 当前正式版本信息
+## 1. 当前版本与基线
 
-- **版本号**：v0.1.0
-- **发布日期**：2026-07-02
-- **GitHub Release Tag**：`v0.1.0`
-- **稳定 Commit**：`7c5adda`
+### 最新正式发布
+
+- **版本号**：v0.1.2
+- **发布日期**：2026-07-03
+- **GitHub Release Tag**：`v0.1.2`
+- **稳定 Commit**：`54359eb`（master / dev 共同指向）
+
+### 当前开发基线
+
+- **基线 Commit**：`af88bfc`（dev 分支，v0.1.3 开发态，**未发布**）
+- **状态**：dev 分支处于 v0.1.3 开发态；未 merge master、未打 tag、未升级版本号、未进入发布流程
+
+### 日志文件路径（C1-1 起）
+
+- 主进程日志：`%APPDATA%\FurTwin\logs\furtwin-main.log`
 
 ## 2. Release Assets
 
-| 文件名 | 说明 |
-|--------|------|
-| `furtwin-0.1.0-setup.exe` | 安装向导版，支持选择安装目录 |
-| `furtwin-0.1.0-win-unpacked.zip` | 免安装版，解压即用 |
+| 文件 / Tag | 说明 |
+|------------|------|
+| `furtwin-0.1.2-setup.exe`（tag `v0.1.2`） | v0.1.2 安装向导版 |
+| `furtwin-0.1.2-win-unpacked.zip`（tag `v0.1.2`） | v0.1.2 免安装版 |
+| `furtwin-0.1.0-setup.exe`（历史 tag `v0.1.0`） | v0.1.0 安装向导版（历史） |
+| `furtwin-0.1.0-win-unpacked.zip`（历史 tag `v0.1.0`） | v0.1.0 免安装版（历史） |
 
 ## 3. 发布前验证通过的核心功能
 
@@ -93,7 +106,7 @@
 ### 宠物窗口置顶
 
 - 观察宠物预览偶尔被其他窗口遮挡的问题，在没有稳定复现前不盲目修改置顶逻辑
-- 可考虑后续增加"重新置顶宠物窗口"的低风险入口
+- 可考虑后续增加"重新置顶宠物窗口"的低风险入口 → **B1 已完成（见 P7 节）**
 
 ### P5E-1：功能回归测试
 
@@ -114,17 +127,49 @@
   - [x] Tray 菜单功能正常
 - **结论**：当前 dev 分支可作为 v0.1.1 候选稳定基础
 
-## 6. 后续开发原则
+## 6. P7 / v0.1.3 开发态（dev 分支，未发布）
+
+### P7A-1：本地配置写入可靠性
+
+- **状态**：完成
+- **Commit**：`5620a98`
+- **内容**：
+  - [x] 新增 `src/main/services/configStore.ts`，提供 `writeConfigAtomically` / `readConfigWithFallback` / `cleanupStaleTempFiles` 三个能力
+  - [x] 原子写：先写 `.tmp` 再 rename 到正式文件；写前将正式文件备份到 `.bak`
+  - [x] 读取：主配置解析失败时从 `.bak` 恢复；都失败保持现有 bundled → {} fallback
+  - [x] 替换 behavior / actionLib / generatedAssets / preview 共 7 处写入点
+  - [x] 启动早期清理残留 `.tmp`
+
+### B1：重新置顶宠物窗口入口
+
+- **状态**：完成
+- **Commit**：`f5f149f`
+- **内容**：
+  - [x] 新增 `restorePetWindow()`：隐身中先 `disableStealthMode`、最小化 `restore`、隐藏 `showInactive`、重新 `setAlwaysOnTop(true, 'screen-saver')`、`moveTop`
+  - [x] 引用无效时复用 `createPetWindow()` 重建，不复制窗口创建逻辑
+  - [x] Tray 右键菜单 + 宠物右键菜单均加入"找回桌宠"入口（通过 `buildAppMenuTemplate` 的 `includeRestorePet` 选项）
+  - [x] 历史"普通窗口遮挡"问题当前无法稳定复现；已验证：点击入口无报错、不创建重复窗口、alwaysOnTop 行为正常
+
+### C1-1：主进程日志记录
+
+- **状态**：完成
+- **Commit**：`af88bfc`
+- **内容**：
+  - [x] 新增 `src/main/services/logger.ts`，提供 `info / warn / error` 三个级别（error 支持 Error.stack）
+  - [x] 日志写到 `%APPDATA%\FurTwin\logs\furtwin-main.log`；写失败 try/catch 兜底，不影响主流程
+  - [x] 接入点：`index.ts`（启动 / 退出 / 未捕获异常 / 未处理 rejection）、`configStore.ts`（.bak 恢复 / 原子写失败）、`tray.ts`（icon 失败）、`petWindow.ts`（`restorePetWindow` 兜底）
+  - [x] 不替换 preview / generatedAssets / actionLib / behavior 中的 console
+
+## 7. 后续开发原则
 
 1. **小步任务**：每个任务拆分到可独立完成的粒度
 2. **单独测试**：每个任务完成后单独验证
 3. **稳定点 commit**：验证通过后立即提交，commit message 使用中文
 4. **分支策略**：
-   - `master`：仅保留正式发布稳定版本
-   - `dev`：日常开发分支，P5 及后续迭代在此分支进行
-   - 等 v0.1.1 稳定后 merge 回 `master` 并发布
+   - `master`：仅保留正式发布稳定版本（当前指向 v0.1.2 / `54359eb`）
+   - `dev`：日常开发分支（当前指向 v0.1.3 开发态 / `af88bfc`，未 merge master、未打 tag、未升级版本号、未进入发布流程）
 
-## 7. 更新日志
+## 8. 更新日志
 
 | 日期 | 内容 |
 |------|------|
@@ -139,3 +184,7 @@
 | 2026-07-03 | P6A-1：动作库搜索与手动排序完成 |
 | 2026-07-03 | P6A-1R / P6A-1R2：修复排序和行为配置重启后丢失 |
 | 2026-07-03 | P6B-1：显示应用版本号完成 |
+| 2026-07-03 | v0.1.2 正式发布（54359eb，master / dev 同步，tag v0.1.2） |
+| 2026-07-06 | P7A-1：本地配置写入可靠性完成（5620a98） |
+| 2026-07-06 | B1：重新置顶宠物窗口入口完成（f5f149f） |
+| 2026-07-06 | C1-1：主进程日志记录完成（af88bfc） |
