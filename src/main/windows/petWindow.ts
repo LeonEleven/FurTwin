@@ -8,6 +8,7 @@ import { scanAllActions, findActionByPath, toActionFramesDir, buildFallbackRunti
 import { getRuntimeLocalConfigPath, toAbsoluteFramesDir, getWindowStatePath } from '../services/actionPaths'
 import { isUserDataProtocolUrl, isBundledProtocolUrl } from '../services/userDataProtocol'
 import { loadAssetInfo, validateAssetInfo, computeDisplayAnchor } from '../utils/assetInfo'
+import { logger } from '../services/logger'
 
 const isDev = !app.isPackaged
 
@@ -491,7 +492,7 @@ export function restorePetWindow(): void {
 
     // 2. 引用无效 → 重建（复用 createPetWindow，不复制逻辑）
     if (!petWindow || petWindow.isDestroyed()) {
-      console.log('[petWindow] restorePetWindow: pet window missing, recreating')
+      logger.info('petWindow', 'restorePetWindow: pet window missing, recreating')
       createPetWindow()
       return
     }
@@ -500,33 +501,34 @@ export function restorePetWindow(): void {
     try {
       if (petWindow.isMinimized()) petWindow.restore()
     } catch (e) {
-      console.warn('[petWindow] restorePetWindow: restore failed:', e)
+      logger.warn('petWindow', 'restorePetWindow: restore failed', e as Error)
     }
 
     // 4. 隐藏 → 显示（不抢焦点，与 ready-to-show 风格一致）
     try {
       if (!petWindow.isVisible()) petWindow.showInactive()
     } catch (e) {
-      console.warn('[petWindow] restorePetWindow: showInactive failed:', e)
+      logger.warn('petWindow', 'restorePetWindow: showInactive failed', e as Error)
     }
 
     // 5. 重新置顶（screen-saver 级别最高）
     try {
       petWindow.setAlwaysOnTop(true, 'screen-saver')
     } catch (e) {
-      console.warn('[petWindow] restorePetWindow: setAlwaysOnTop failed:', e)
+      logger.warn('petWindow', 'restorePetWindow: setAlwaysOnTop failed', e as Error)
     }
 
     // 6. Z-order 提到最前
     try {
       petWindow.moveTop()
     } catch (e) {
-      console.warn('[petWindow] restorePetWindow: moveTop failed:', e)
+      logger.warn('petWindow', 'restorePetWindow: moveTop failed', e as Error)
     }
 
-    console.log('[petWindow] restorePetWindow: done')
+    logger.info('petWindow', 'restorePetWindow: done')
   } catch (e) {
-    console.error('[petWindow] restorePetWindow: unexpected error:', e)
+    // C1-1: 兜底异常记录
+    logger.error('petWindow', 'restorePetWindow: unexpected error', e as Error)
   }
 }
 

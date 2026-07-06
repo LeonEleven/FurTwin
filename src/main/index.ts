@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, ipcMain } from 'electron'
+import { join } from 'path'
 import { IPC_CHANNELS } from '../shared/types'
 import { createPetWindow, setupWindowResize, setupPetDrag, setupContextMenu } from './windows/petWindow'
 import { createControlPanel, setQuitting, showControlPanel } from './windows/controlPanel'
@@ -14,6 +15,7 @@ import { setupPreview } from './ipc/preview'
 import { setupPetShape } from './ipc/petShape'
 import { registerUserDataProtocol, setupUserDataProtocolHandler, registerBundledProtocol, setupBundledProtocolHandler } from './services/userDataProtocol'
 import { cleanupStaleTempFiles } from './services/configStore'
+import { initLogger, logger } from './services/logger'
 
 // Register protocol schemes before app is ready
 registerUserDataProtocol()
@@ -22,6 +24,11 @@ registerBundledProtocol()
 Menu.setApplicationMenu(null)
 
 app.whenReady().then(() => {
+  // C1-1: 初始化主进程 logger（必须在最早阶段，后续所有日志点依赖它）
+  // 日志写到 userData/logs/furtwin-main.log
+  initLogger(join(app.getPath('userData'), 'logs', 'furtwin-main.log'))
+  logger.info('startup', `app ready v${app.getVersion()} (packaged=${app.isPackaged})`)
+
   // Setup userData protocol handler (P2D-1A)
   // This provides read-only access to userData/actions/generated for future use
   setupUserDataProtocolHandler()
@@ -76,10 +83,21 @@ app.whenReady().then(() => {
 
 // Allow real quit (bypass close->hide)
 app.on('before-quit', () => {
+  logger.info('startup', 'app exiting')
   destroyTray()
   setQuitting()
 })
 
 app.on('window-all-closed', () => {
   app.quit()
+})
+
+// C1-1: 未捕获异常 / 未处理 rejection 日志记录
+// 仅记录，不强制退出或重启，让 Electron 走默认流程
+process.on('uncaughtException', (err) => {
+  logger.error('process', 'uncaughtException', err)
+})
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('process', 'unhandledRejection', reason)
 })

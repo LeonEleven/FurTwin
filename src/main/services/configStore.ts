@@ -12,6 +12,7 @@
  */
 
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs'
+import { logger } from './logger'
 
 /**
  * 原子写入配置：写 .tmp → rename → 正式；写前 .bak 备份。
@@ -30,7 +31,7 @@ export function writeConfigAtomically(configPath: string, config: Record<string,
       try {
         renameSync(configPath, bakPath)
       } catch (e) {
-        console.warn(`[configStore] backup failed (${configPath} → ${bakPath}):`, e)
+        logger.warn('configStore', `backup failed: ${configPath} → ${bakPath}`, e as Error)
         // 备份失败不阻断写入，继续
       }
     }
@@ -39,7 +40,7 @@ export function writeConfigAtomically(configPath: string, config: Record<string,
     try {
       writeFileSync(tmpPath, JSON.stringify(config, null, 2), 'utf-8')
     } catch (e) {
-      console.error(`[configStore] write tmp failed (${tmpPath}):`, e)
+      logger.error('configStore', `write tmp failed: ${tmpPath}`, e as Error)
       return false
     }
 
@@ -47,7 +48,7 @@ export function writeConfigAtomically(configPath: string, config: Record<string,
     try {
       renameSync(tmpPath, configPath)
     } catch (e) {
-      console.error(`[configStore] rename tmp → config failed (${tmpPath} → ${configPath}):`, e)
+      logger.error('configStore', `rename tmp → config failed: ${tmpPath} → ${configPath}`, e as Error)
       // 清理残留 tmp
       try { if (existsSync(tmpPath)) unlinkSync(tmpPath) } catch {}
       // 尝试把 bak 恢复回正式文件（尽力）
@@ -59,7 +60,7 @@ export function writeConfigAtomically(configPath: string, config: Record<string,
 
     return true
   } catch (e) {
-    console.error('[configStore] writeConfigAtomically unexpected error:', e)
+    logger.error('configStore', 'writeConfigAtomically unexpected error', e as Error)
     return false
   }
 }
@@ -79,8 +80,8 @@ export function readConfigWithFallback(configPath: string, bundledConfigPath: st
     try {
       return JSON.parse(readFileSync(configPath, 'utf-8'))
     } catch (parseError) {
-      console.warn(`[configStore] main config parse failed (${configPath}), trying backup:`, parseError)
-      // 主配置损坏 → 尝试从 .bak 恢复
+      // C1-1: 主配置损坏 → 尝试从 .bak 恢复
+      logger.warn('configStore', `main config parse failed, trying backup: ${configPath}`, parseError as Error)
       const bakPath = configPath + '.bak'
       if (existsSync(bakPath)) {
         try {
@@ -89,14 +90,17 @@ export function readConfigWithFallback(configPath: string, bundledConfigPath: st
           // 恢复：将 bak 内容写回主文件（尽力，不阻断读取）
           try {
             writeFileSync(configPath, bakContent, 'utf-8')
-            console.log(`[configStore] restored ${configPath} from backup`)
+            logger.info('configStore', `restored main config from backup: ${configPath}`)
           } catch (restoreErr) {
-            console.warn('[configStore] failed to restore backup to main config:', restoreErr)
+            logger.warn('configStore', `failed to restore backup to main config: ${configPath}`, restoreErr as Error)
           }
           return parsed
         } catch (bakError) {
-          console.warn(`[configStore] backup also unreadable (${bakPath}):`, bakError)
+          // C1-1: bak 也不可读 → warn + fallback
+          logger.warn('configStore', `backup also unreadable, falling back: ${bakPath}`, bakError as Error)
         }
+      } else {
+        logger.warn('configStore', `main config parse failed and no backup exists: ${configPath}`)
       }
       // 主配置损坏且无可恢复的 bak → 返回空，让调用方走 bundled / {} 兜底
       return {}
@@ -108,7 +112,7 @@ export function readConfigWithFallback(configPath: string, bundledConfigPath: st
     try {
       return JSON.parse(readFileSync(bundledConfigPath, 'utf-8'))
     } catch (e) {
-      console.warn(`[configStore] bundled config parse failed (${bundledConfigPath}):`, e)
+      logger.warn('configStore', `bundled config parse failed: ${bundledConfigPath}`, e as Error)
     }
   }
 
@@ -126,9 +130,9 @@ export function cleanupStaleTempFiles(configPath: string): void {
   if (existsSync(tmpPath)) {
     try {
       unlinkSync(tmpPath)
-      console.log(`[configStore] cleaned stale tmp file: ${tmpPath}`)
+      logger.info('configStore', `cleaned stale tmp file: ${tmpPath}`)
     } catch (e) {
-      console.warn(`[configStore] failed to clean stale tmp file (${tmpPath}):`, e)
+      logger.warn('configStore', `failed to clean stale tmp file: ${tmpPath}`, e as Error)
     }
   }
 }

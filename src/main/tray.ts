@@ -9,6 +9,7 @@ import { Tray, Menu, nativeImage, app } from 'electron'
 import { join } from 'path'
 import { buildAppMenuTemplate } from './windows/petWindow'
 import { toggleControlPanel } from './windows/controlPanel'
+import { logger } from './services/logger'
 
 let tray: Tray | null = null
 
@@ -24,11 +25,11 @@ export function createTray(): void {
   try {
     icon = nativeImage.createFromPath(iconPath)
     const size = icon.getSize()
-    console.log(`[tray] icon loaded: path=${iconPath} empty=${icon.isEmpty()} size=${size.width}x${size.height}`)
+    logger.info('tray', `icon loaded: path=${iconPath} empty=${icon.isEmpty()} size=${size.width}x${size.height}`)
     if (icon.isEmpty()) throw new Error('icon is empty')
   } catch (e) {
-    console.warn('[tray] failed to load icon, creating fallback:', e)
-    // Fallback: create a small empty icon so Tray still works
+    // C1-1: icon 失败记录 warn，降级到空 icon 仍可使 Tray 正常工作
+    logger.warn('tray', `failed to load icon, creating fallback: ${iconPath}`, e as Error)
     icon = nativeImage.createEmpty()
   }
 
@@ -46,13 +47,13 @@ export function createTray(): void {
     tray?.popUpContextMenu(Menu.buildFromTemplate(template))
   })
 
-  console.log('[tray] created')
+  logger.info('tray', 'tray created')
 }
 
 export function destroyTray(): void {
   if (tray) {
     tray.destroy()
     tray = null
-    console.log('[tray] destroyed')
+    logger.info('tray', 'tray destroyed')
   }
 }
