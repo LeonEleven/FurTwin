@@ -462,6 +462,74 @@ export function getPetWindow(): BrowserWindow | null {
   return petWindow
 }
 
+/**
+ * 找回桌宠 / 重新置顶。
+ *
+ * 触发时机：
+ * - 宠物窗口被其他窗口遮挡（失去置顶）
+ * - 宠物窗口被隐藏
+ * - 宠物窗口被最小化
+ * - 隐身模式开启导致不可见
+ *
+ * 策略：
+ * - 引用不存在或已销毁 → 复用 createPetWindow() 重建
+ * - 隐身中 → 先 disableStealthMode() 恢复可见
+ * - 最小化 → restore()
+ * - showInactive 恢复显示（不抢焦点）
+ * - setAlwaysOnTop(true, 'screen-saver') 重新置顶
+ * - moveTop() 将 Z-order 提到同类窗口最前
+ *
+ * 不改变窗口位置 / 不 setBounds / 不 center。
+ * 失败不抛，兜底 try/catch。
+ */
+export function restorePetWindow(): void {
+  try {
+    // 1. 隐身中先恢复可见
+    if (stealthModeEnabled) {
+      disableStealthMode()
+    }
+
+    // 2. 引用无效 → 重建（复用 createPetWindow，不复制逻辑）
+    if (!petWindow || petWindow.isDestroyed()) {
+      console.log('[petWindow] restorePetWindow: pet window missing, recreating')
+      createPetWindow()
+      return
+    }
+
+    // 3. 最小化 → 还原
+    try {
+      if (petWindow.isMinimized()) petWindow.restore()
+    } catch (e) {
+      console.warn('[petWindow] restorePetWindow: restore failed:', e)
+    }
+
+    // 4. 隐藏 → 显示（不抢焦点，与 ready-to-show 风格一致）
+    try {
+      if (!petWindow.isVisible()) petWindow.showInactive()
+    } catch (e) {
+      console.warn('[petWindow] restorePetWindow: showInactive failed:', e)
+    }
+
+    // 5. 重新置顶（screen-saver 级别最高）
+    try {
+      petWindow.setAlwaysOnTop(true, 'screen-saver')
+    } catch (e) {
+      console.warn('[petWindow] restorePetWindow: setAlwaysOnTop failed:', e)
+    }
+
+    // 6. Z-order 提到最前
+    try {
+      petWindow.moveTop()
+    } catch (e) {
+      console.warn('[petWindow] restorePetWindow: moveTop failed:', e)
+    }
+
+    console.log('[petWindow] restorePetWindow: done')
+  } catch (e) {
+    console.error('[petWindow] restorePetWindow: unexpected error:', e)
+  }
+}
+
 export function setupWindowResize(): void {
   ipcMain.on(IPC_CHANNELS.RESIZE_WINDOW, (_event, width: number, height: number, oldAnchorX?: number, oldAnchorY?: number, newAnchorX?: number, newAnchorY?: number) => {
     if (!petWindow || petWindow.isDestroyed()) return
@@ -557,6 +625,7 @@ export function buildAppMenuTemplate(options?: {
   includeActionSwitcher?: boolean
   includeStealth?: boolean
   includeAutoStart?: boolean
+  includeRestorePet?: boolean
 }): Electron.MenuItemConstructorOptions[] {
   const visible = isControlPanelVisible()
   const autoEnabled = isAutoBehaviorActive()
@@ -569,15 +638,26 @@ export function buildAppMenuTemplate(options?: {
         else showControlPanel()
       },
     },
-    {
-      label: '自动行为',
-      type: 'checkbox',
-      checked: autoEnabled,
-      click: () => {
-        ipcMain.emit(IPC_CHANNELS.TOGGLE_AUTO_BEHAVIOR, null, { enabled: !autoEnabled })
-      },
-    },
   ]
+
+  // B1: 找回桌宠 / 重新置顶
+  if (options?.includeRestorePet) {
+    items.push({
+      label: '找回桌宠',
+      click: () => {
+        restorePetWindow()
+      },
+    })
+  }
+
+  items.push({
+    label: '自动行为',
+    type: 'checkbox',
+    checked: autoEnabled,
+    click: () => {
+      ipcMain.emit(IPC_CHANNELS.TOGGLE_AUTO_BEHAVIOR, null, { enabled: !autoEnabled })
+    },
+  })
 
   if (options?.includeAutoStart) {
     const autoStartEnabled = app.getLoginItemSettings().openAtLogin
@@ -647,7 +727,7 @@ export function setupContextMenu(): void {
   ipcMain.on(IPC_CHANNELS.SHOW_CONTEXT_MENU, () => {
     if (!petWindow || petWindow.isDestroyed()) return
     try {
-      const template = buildAppMenuTemplate({ includeReloadAnimation: true, includeActionSwitcher: true, includeStealth: true, includeAutoStart: true })
+      const template = buildAppMenuTemplate({ includeReloadAnimation: true, includeActionSwitcher: true, includeStealth: true, includeAutoStart: true, includeRestorePet: true })
       Menu.buildFromTemplate(template).popup({ window: petWindow })
     } catch {}
   })
