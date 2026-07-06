@@ -1,11 +1,12 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { readdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs'
+import { readdirSync, readFileSync, existsSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
 import { getControlPanel } from '../windows/controlPanel'
 import { pauseAutoBehavior } from '../behavior'
 import { getLocalConfigPath, getRuntimeLocalConfigPath, getBundledLocalConfigPath, getPublicDir, getFramesRealDir, toRendererPath, getUserGeneratedDir } from '../services/actionPaths'
 import { isUserDataProtocolUrl, isBundledProtocolUrl } from '../services/userDataProtocol'
+import { writeConfigAtomically, readConfigWithFallback } from '../services/configStore'
 
 const LOCAL_CONFIG_PATH = getRuntimeLocalConfigPath()
 const BUNDLED_CONFIG_PATH = getBundledLocalConfigPath()
@@ -94,14 +95,15 @@ export function validateStartupConfig(): void {
   if (!existsSync(LOCAL_CONFIG_PATH)) return
 
   try {
-    const config = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+    // P7A-1: 使用带备份恢复的读取
+    const config = readConfigWithFallback(LOCAL_CONFIG_PATH, BUNDLED_CONFIG_PATH)
     // Normalize double-slash in framesDir (legacy bug: .//assets/... → ./assets/...)
     let framesDir: string = config.framesDir
     if (framesDir && framesDir.startsWith('.//')) {
       framesDir = './' + framesDir.slice(3)
       console.log(`[preview] startup: normalized framesDir: ${config.framesDir} → ${framesDir}`)
       config.framesDir = framesDir
-      try { writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8') } catch {}
+      try { writeConfigAtomically(LOCAL_CONFIG_PATH, config) } catch {}
     }
     if (!framesDir) {
       console.log('[preview] startup: empty framesDir, stripping action fields')
@@ -164,7 +166,8 @@ export function validateStartupConfig(): void {
 function stripActionFields(): void {
   if (!existsSync(LOCAL_CONFIG_PATH)) return
   try {
-    const config = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+    // P7A-1: 使用带备份恢复的读取
+    const config = readConfigWithFallback(LOCAL_CONFIG_PATH, BUNDLED_CONFIG_PATH)
     // Fields to remove (action/preview specific)
     const actionFields = [
       'framesDir', 'name', 'label', 'fps', 'scale', 'displayScale',
@@ -180,7 +183,8 @@ function stripActionFields(): void {
       unlinkSync(LOCAL_CONFIG_PATH)
       console.log('[preview] stripped action fields, config now empty, deleted file')
     } else {
-      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+      // P7A-1: 原子写入
+      writeConfigAtomically(LOCAL_CONFIG_PATH, config)
       console.log(`[preview] stripped action fields, preserved: ${meaningfulKeys.join(', ')}`)
     }
   } catch {
@@ -245,18 +249,8 @@ export function setupPreview(): void {
     // Only write for正式应用
     if (!isTemporary) {
       try {
-        // Preserve existing behavior params when writing action config
-        // Priority: userData config > bundled config > empty
-        let existingConfig: Record<string, any> = {}
-        if (existsSync(LOCAL_CONFIG_PATH)) {
-          try {
-            existingConfig = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
-          } catch {}
-        } else if (existsSync(BUNDLED_CONFIG_PATH)) {
-          try {
-            existingConfig = JSON.parse(readFileSync(BUNDLED_CONFIG_PATH, 'utf-8'))
-          } catch {}
-        }
+        // P7A-1: 使用带备份恢复的读取
+        const existingConfig = readConfigWithFallback(LOCAL_CONFIG_PATH, BUNDLED_CONFIG_PATH)
         // Merge: action config fields + preserved behavior params
         const mergedConfig = {
           ...config,
@@ -267,7 +261,11 @@ export function setupPreview(): void {
           autoBehaviorManualPauseSec: existingConfig.autoBehaviorManualPauseSec,
           customActionOrder: existingConfig.customActionOrder,
         }
-        writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
+        // P7A-1: 原子写入
+        if (!writeConfigAtomically(LOCAL_CONFIG_PATH, mergedConfig)) {
+          console.error('[preview] failed to write local.config.json: atomic write returned false')
+          return
+        }
         console.log(`[preview] write local.config scale=${config.scale} displayScale=${config.displayScale}`)
       } catch (e) {
         console.error('[preview] failed to write local.config.json:', e)
@@ -326,10 +324,12 @@ export function setupPreview(): void {
   ipcMain.on(IPC_CHANNELS.UPDATE_ACTIVE_PLAYBACK, (_event, payload: { loop?: boolean; fps?: number }) => {
     if (!existsSync(LOCAL_CONFIG_PATH)) return
     try {
-      const config = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
+      // P7A-1: 使用带备份恢复的读取
+      const config = readConfigWithFallback(LOCAL_CONFIG_PATH, BUNDLED_CONFIG_PATH)
       if (payload.loop !== undefined) config.loop = payload.loop
       if (payload.fps !== undefined) config.fps = payload.fps
-      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+      // P7A-1: 原子写入
+      writeConfigAtomically(LOCAL_CONFIG_PATH, config)
       console.log(`[preview] updated active playback: loop=${config.loop} fps=${config.fps}`)
       BrowserWindow.getAllWindows().forEach((win) => {
         try {

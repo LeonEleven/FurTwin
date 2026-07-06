@@ -1,11 +1,11 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { IPC_CHANNELS, type AnimConfig } from '../../shared/types'
 import { loadAssetInfo, validateAssetInfo, computeDisplayAnchor } from '../utils/assetInfo'
 import { getControlPanel } from '../windows/controlPanel'
 import { pauseAutoBehavior } from '../behavior'
 import { getRuntimeLocalConfigPath, getBundledLocalConfigPath } from '../services/actionPaths'
 import { findActionByPath, toActionFramesDir } from '../services/actionRepository'
+import { writeConfigAtomically, readConfigWithFallback } from '../services/configStore'
 
 const LOCAL_CONFIG_PATH = getRuntimeLocalConfigPath()
 const BUNDLED_CONFIG_PATH = getBundledLocalConfigPath()
@@ -64,18 +64,8 @@ export function setupActionLib(): void {
     console.log(`[actionLib] switch asset id=${entry.id} source=${entry.source} frames=${config.frameCount} display=${config.frameWidth}x${config.frameHeight} scale=${config.displayScale} framesDir=${config.framesDir} anchor=(${anchor?.anchorX?.toFixed(1) ?? '-'},${anchor?.anchorY?.toFixed(1) ?? '-'}) src=${info!.sourceWidth ?? '-'}x${info!.sourceHeight ?? '-'} trim=${JSON.stringify(info!.trimBox ?? '-')}`)
 
     try {
-      // Preserve existing behavior params when writing action config
-      // Priority: userData config > bundled config > empty
-      let existingConfig: Record<string, any> = {}
-      if (existsSync(LOCAL_CONFIG_PATH)) {
-        try {
-          existingConfig = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
-        } catch {}
-      } else if (existsSync(BUNDLED_CONFIG_PATH)) {
-        try {
-          existingConfig = JSON.parse(readFileSync(BUNDLED_CONFIG_PATH, 'utf-8'))
-        } catch {}
-      }
+      // P7A-1: 使用带备份恢复的读取
+      const existingConfig = readConfigWithFallback(LOCAL_CONFIG_PATH, BUNDLED_CONFIG_PATH)
       // Merge: action config fields + preserved behavior params
       const mergedConfig = {
         ...config,
@@ -86,7 +76,11 @@ export function setupActionLib(): void {
         autoBehaviorManualPauseSec: existingConfig.autoBehaviorManualPauseSec,
         customActionOrder: existingConfig.customActionOrder,
       }
-      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
+      // P7A-1: 原子写入
+      if (!writeConfigAtomically(LOCAL_CONFIG_PATH, mergedConfig)) {
+        console.error('[actionLib] write local.config.json failed: atomic write returned false')
+        return
+      }
       console.log('[actionLib] local.config.json updated')
     } catch (e) {
       console.error('[actionLib] write local.config.json failed:', e)

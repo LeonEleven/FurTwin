@@ -13,6 +13,7 @@ import { setupActionLib } from './ipc/actionLib'
 import { setupPreview } from './ipc/preview'
 import { setupPetShape } from './ipc/petShape'
 import { registerUserDataProtocol, setupUserDataProtocolHandler, registerBundledProtocol, setupBundledProtocolHandler } from './services/userDataProtocol'
+import { cleanupStaleTempFiles } from './services/configStore'
 
 // Register protocol schemes before app is ready
 registerUserDataProtocol()
@@ -28,6 +29,10 @@ app.whenReady().then(() => {
   // Setup bundled protocol handler (P2E-5B)
   // Serves bundled action frames from resourcesPath in packaged mode
   setupBundledProtocolHandler()
+
+  // P7A-1: 清理上次运行时可能残留的 .tmp 文件（写了一半的标志）
+  // 必须在任何配置读取/校验之前调用
+  cleanupStaleTempFiles(app.getPath('userData') + '/local.config.json')
 
   // 启动时验证上次动作是否仍可用（无效则自动回退到 Demo）
   validateStartupConfig()

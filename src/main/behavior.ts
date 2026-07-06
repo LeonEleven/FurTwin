@@ -11,13 +11,14 @@
  */
 
 import { BrowserWindow, ipcMain } from 'electron'
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs'
+import { existsSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import { IPC_CHANNELS, type AnimConfig } from '../shared/types'
 import { loadAssetInfo, getActiveAssetId, computeDisplayAnchor, type AssetInfo } from './utils/assetInfo'
 import { getControlPanel } from './windows/controlPanel'
 import { getGeneratedDir, getLocalConfigPath, getRuntimeLocalConfigPath, getBundledLocalConfigPath, getPublicDir } from './services/actionPaths'
 import { scanValidActions, toActionFramesDir, type ActionEntry } from './services/actionRepository'
+import { writeConfigAtomically, readConfigWithFallback } from './services/configStore'
 
 // ─── Constants ──────────────────────────────────────────
 const STARTUP_DELAY = 3_000       // Wait for renderer to initialize before first action
@@ -78,18 +79,8 @@ function getParams(): BehaviorParams {
 // ─── Persistence ────────────────────────────────────────
 
 function readLocalConfig(): Record<string, any> {
-  // Priority: userData config > bundled config > empty
-  if (existsSync(LOCAL_CONFIG_PATH)) {
-    try {
-      return JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
-    } catch {}
-  }
-  if (existsSync(BUNDLED_CONFIG_PATH)) {
-    try {
-      return JSON.parse(readFileSync(BUNDLED_CONFIG_PATH, 'utf-8'))
-    } catch {}
-  }
-  return {}
+  // P7A-1: 使用带备份恢复的读取；主配置损坏时尝试从 .bak 恢复
+  return readConfigWithFallback(LOCAL_CONFIG_PATH, BUNDLED_CONFIG_PATH)
 }
 
 function loadAutoBehaviorEnabled(): boolean {
@@ -102,7 +93,10 @@ export function saveAutoBehaviorEnabled(enabled: boolean): void {
   try {
     const config = readLocalConfig()
     config.autoBehaviorEnabled = enabled
-    writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+    // P7A-1: 原子写入
+    if (!writeConfigAtomically(LOCAL_CONFIG_PATH, config)) {
+      console.warn('[behavior] failed to save autoBehaviorEnabled: atomic write returned false')
+    }
   } catch (e) {
     console.warn('[behavior] failed to save autoBehaviorEnabled:', e)
   }
@@ -646,7 +640,10 @@ export function setupBehaviorIPC(): void {
       if (Number.isFinite(payload.minIntervalSec) && payload.minIntervalSec >= 0) config.autoBehaviorMinIntervalSec = payload.minIntervalSec
       if (Number.isFinite(payload.maxIntervalSec) && payload.maxIntervalSec >= 0) config.autoBehaviorMaxIntervalSec = payload.maxIntervalSec
       if (Number.isFinite(payload.manualPauseSec) && payload.manualPauseSec >= 0) config.autoBehaviorManualPauseSec = payload.manualPauseSec
-      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+      // P7A-1: 原子写入
+      if (!writeConfigAtomically(LOCAL_CONFIG_PATH, config)) {
+        console.warn('[behavior] params save: atomic write returned false')
+      }
       console.log(`[behavior] params saved: ${JSON.stringify(payload)}`)
 
       // Reschedule with new params if auto-behavior is enabled

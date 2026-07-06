@@ -7,6 +7,7 @@ import { getControlPanel } from '../windows/controlPanel'
 import { getGeneratedDir, getRuntimeLocalConfigPath, getBundledLocalConfigPath, getAssetMetadataPath } from '../services/actionPaths'
 import { scanAllActions, validateActionPath, validateActionName, renameAction, deleteActionDir, getFallbackActionCandidate, buildFallbackRuntimeConfig, findActionByPath, toActionFramesDir, type ActionEntry } from '../services/actionRepository'
 import { restoreDemo } from './preview'
+import { writeConfigAtomically, readConfigWithFallback } from '../services/configStore'
 
 const GENERATED_DIR = getGeneratedDir()
 const METADATA_FILE = 'asset-metadata.json'
@@ -69,12 +70,14 @@ export function setupGeneratedAssets(): void {
     // Clean up customActionOrder: remove deleted action ID
     try {
       if (existsSync(localConfigPath)) {
-        const config = JSON.parse(readFileSync(localConfigPath, 'utf-8'))
+        // P7A-1: 使用带备份恢复的读取
+        const config = readConfigWithFallback(localConfigPath, getBundledLocalConfigPath())
         if (Array.isArray(config.customActionOrder)) {
           const idx = config.customActionOrder.indexOf(deletedDirName)
           if (idx !== -1) {
             config.customActionOrder.splice(idx, 1)
-            writeFileSync(localConfigPath, JSON.stringify(config, null, 2), 'utf-8')
+            // P7A-1: 原子写入
+            writeConfigAtomically(localConfigPath, config)
             console.log(`[generated] removed "${deletedDirName}" from customActionOrder`)
           }
         }
@@ -102,18 +105,8 @@ export function setupGeneratedAssets(): void {
         console.warn(`[generated] failed to build runtime config for fallback: ${fallback.info.name}`)
         return { ok: false, error: 'Failed to build runtime config' }
       }
-      // Preserve existing behavior params when writing fallback config
-      // Priority: userData config > bundled config > empty
-      let existingConfig: Record<string, any> = {}
-      if (existsSync(LOCAL_CONFIG_PATH)) {
-        try {
-          existingConfig = JSON.parse(readFileSync(LOCAL_CONFIG_PATH, 'utf-8'))
-        } catch {}
-      } else if (existsSync(BUNDLED_CONFIG_PATH)) {
-        try {
-          existingConfig = JSON.parse(readFileSync(BUNDLED_CONFIG_PATH, 'utf-8'))
-        } catch {}
-      }
+      // P7A-1: 使用带备份恢复的读取
+      const existingConfig = readConfigWithFallback(LOCAL_CONFIG_PATH, BUNDLED_CONFIG_PATH)
       const mergedConfig = {
         ...config,
         autoBehaviorEnabled: existingConfig.autoBehaviorEnabled,
@@ -123,7 +116,8 @@ export function setupGeneratedAssets(): void {
         autoBehaviorManualPauseSec: existingConfig.autoBehaviorManualPauseSec,
         customActionOrder: existingConfig.customActionOrder,
       }
-      writeFileSync(LOCAL_CONFIG_PATH, JSON.stringify(mergedConfig, null, 2), 'utf-8')
+      // P7A-1: 原子写入
+      writeConfigAtomically(LOCAL_CONFIG_PATH, mergedConfig)
       console.log(`[generated] deleted active, switched to fallback: "${config.name}" (id=${fallback.id})`)
     } else {
       // No remaining assets — restore demo animation
@@ -196,13 +190,15 @@ export function setupGeneratedAssets(): void {
             const configPath = getRuntimeLocalConfigPath()
             try {
               if (existsSync(configPath)) {
-                const existing = JSON.parse(readFileSync(configPath, 'utf-8'))
+                // P7A-1: 使用带备份恢复的读取
+                const existing = readConfigWithFallback(configPath, getBundledLocalConfigPath())
                 if (existing.customActionOrder) {
                   config.customActionOrder = existing.customActionOrder
                 }
               }
             } catch {}
-            writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+            // P7A-1: 原子写入
+            writeConfigAtomically(configPath, config)
             // Send config directly to pet (not RELOAD_ANIM which re-fetches from file)
             BrowserWindow.getAllWindows().forEach(win => {
               if (!win.isDestroyed()) {
@@ -248,11 +244,8 @@ export function setupGeneratedAssets(): void {
     const configPath = getRuntimeLocalConfigPath()
 
     try {
-      // Read or initialize customActionOrder
-      let config: Record<string, any> = {}
-      if (existsSync(configPath)) {
-        config = JSON.parse(readFileSync(configPath, 'utf-8'))
-      }
+      // P7A-1: 使用带备份恢复的读取
+      let config: Record<string, any> = readConfigWithFallback(configPath, getBundledLocalConfigPath())
 
       // Get current valid action IDs (from scanAllActions without custom order)
       // We need the raw scan to get all current IDs
@@ -290,7 +283,8 @@ export function setupGeneratedAssets(): void {
       const swapIdx = direction === 'up' ? idx - 1 : idx + 1
       ;[order[idx], order[swapIdx]] = [order[swapIdx], order[idx]]
 
-      writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+      // P7A-1: 原子写入
+      writeConfigAtomically(configPath, config)
       console.log(`[generated] moved "${actionId}" ${direction}, new order: ${order.join(', ')}`)
       return { ok: true }
     } catch (e) {
