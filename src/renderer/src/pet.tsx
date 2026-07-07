@@ -1,6 +1,7 @@
 import { StrictMode, useState, useEffect, useCallback, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { PetSprite } from './components/PetSprite'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import type { AnimConfig } from '../../shared/types'
 
 const CONFIG_URL = './assets/actions/idle/config.json'
@@ -177,4 +178,10 @@ function PetApp() {
   )
 }
 
-createRoot(document.getElementById('root')!).render(<PetApp />)
+// C2: 桌宠 renderer 包一层 ErrorBoundary（variant="pet"），
+// 保护桌宠组件异常时不白屏，fallback 保持透明 + pointerEvents:none
+createRoot(document.getElementById('root')!).render(
+  <ErrorBoundary variant="pet">
+    <PetApp />
+  </ErrorBoundary>
+)
