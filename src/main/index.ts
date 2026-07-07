@@ -6,7 +6,7 @@ import { createControlPanel, setQuitting, showControlPanel } from './windows/con
 import { createTray, destroyTray } from './tray'
 import { setupSelectVideo, setupExtractFrames } from './ipc/extract'
 import { validateStartupConfig } from './ipc/preview'
-import { initBehavior, setupBehaviorIPC } from './behavior'
+import { initBehavior, setupBehaviorIPC, stopAutoBehavior } from './behavior'
 import { setupOpenPath } from './ipc/openPath'
 import { setupGeneratedAssets } from './ipc/generatedAssets'
 import { setupAssetPackage } from './ipc/assetPackage'
@@ -84,6 +84,8 @@ app.whenReady().then(() => {
 // Allow real quit (bypass close->hide)
 app.on('before-quit', () => {
   logger.info('startup', 'app exiting')
+  // P7-R3F: 先清理行为系统定时器，避免退出后 pending timer 触发已销毁 renderer 上的 IPC / console EPIPE
+  stopAutoBehavior()
   destroyTray()
   setQuitting()
 })

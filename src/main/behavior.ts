@@ -39,10 +39,12 @@ const PUBLIC_DIR = getPublicDir()
 let autoBehaviorEnabled = true
 let pauseUntil = 0
 let autoTimer: ReturnType<typeof setTimeout> | null = null
+let startupTimer: ReturnType<typeof setTimeout> = null  // 启动阶段 3s 延时定时器（用于退出时清理）
 let isAutoPlaying = false  // Currently playing a random auto-inserted action
 let autoPlayRepeatRemaining = 0  // Remaining repeat count for current auto-insert
 let currentAutoInsertConfig: AnimConfig | null = null  // Config for replaying
 let currentPlayingActionName: string | null = null  // Track current playing action name (persists through idle)
+let isExiting = false  // P7-R3F: 应用退出标记，阻止退出后定时器继续触发 EPIPE
 
 // ─── Configurable Parameters ────────────────────────────
 
@@ -336,7 +338,28 @@ function playIdle(): void {
   }
 }
 
+// P7-R3F: 应用退出时清理所有自动行为定时器，避免已退出的 renderer 上 EPIPE
+export function stopAutoBehavior(): void {
+  isExiting = true
+  autoBehaviorEnabled = false
+
+  if (startupTimer !== null) {
+    clearTimeout(startupTimer)
+    startupTimer = null
+  }
+
+  if (autoTimer !== null) {
+    clearTimeout(autoTimer)
+    autoTimer = null
+  }
+
+  // isAutoPlaying 状态保留到下次启动（由 initBehavior 重新加载），这里不清零
+}
+
 function scheduleNext(delay?: number): void {
+  // P7-R3F: 退出中不再调度，避免 EPIPE
+  if (isExiting) return
+
   if (autoTimer) {
     clearTimeout(autoTimer)
     autoTimer = null
@@ -352,6 +375,9 @@ function scheduleNext(delay?: number): void {
 }
 
 function tick(): void {
+  // P7-R3F: 退出中 tick 立即返回，避免调用 console / computeDisplayAnchor 触发 EPIPE
+  if (isExiting) return
+
   if (!autoBehaviorEnabled) {
     console.log('[behavior] auto-behavior disabled, stopping')
     return
@@ -449,7 +475,10 @@ export function initBehavior(): void {
   if (autoBehaviorEnabled) {
     // Delay to let pet renderer initialize and show initial config
     console.log(`[behavior] waiting ${STARTUP_DELAY / 1000}s before first auto-action`)
-    setTimeout(() => {
+    startupTimer = setTimeout(() => {
+      startupTimer = null
+      // P7-R3F: 等待期间若已退出，立即返回，避免触发 EPIPE
+      if (isExiting) return
       playIdle()
       scheduleNext(p.firstDelaySec * 1000)
     }, STARTUP_DELAY)
