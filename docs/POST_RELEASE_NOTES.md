@@ -11,7 +11,7 @@
 
 ### 当前开发基线
 
-- **基线 Commit**：`af88bfc`（dev 分支，v0.1.3 开发态，**未发布**）
+- **基线 Commit**：`abb407f`（dev 分支，v0.1.3 开发态，**未发布**）
 - **状态**：dev 分支处于 v0.1.3 开发态；未 merge master、未打 tag、未升级版本号、未进入发布流程
 
 ### 日志文件路径（C1-1 起）
@@ -160,14 +160,64 @@
   - [x] 接入点：`index.ts`（启动 / 退出 / 未捕获异常 / 未处理 rejection）、`configStore.ts`（.bak 恢复 / 原子写失败）、`tray.ts`（icon 失败）、`petWindow.ts`（`restorePetWindow` 兜底）
   - [x] 不替换 preview / generatedAssets / actionLib / behavior 中的 console
 
-## 7. 后续开发原则
+### C2：渲染错误边界
+
+- **状态**：完成
+- **Commit**：`abb407f`
+- **修改文件**：`src/renderer/src/components/ErrorBoundary.tsx`（新增）、`src/renderer/src/main.tsx`、`src/renderer/src/pet.tsx`
+- **内容**：
+  - [x] 最小 React ErrorBoundary (class component + `getDerivedStateFromError` + `componentDidCatch`)，避免控制面板 / 桌宠 renderer 组件异常时白屏
+  - [x] `variant: 'control' | 'pet'` 双形态 fallback
+  - [x] 控制面板 fallback：中文标题 + 描述 + 开发期 stack + 「重试」/「关闭窗口」按钮；重试重置 state，关闭走 `window.close()`（主进程拦截为 hide）
+  - [x] 桌宠 fallback：生产包 `return null`；开发包 10px 极淡红字仅供调试；强制 `background: transparent` + `pointerEvents: none`，不影响透明 overlay 与点击穿透
+  - [x] 不接主进程 logger；不新增 IPC；不引新依赖
+- **测试结果**：
+  - T2 控制面板注入 throw → fallback UI 正常显示；T3 桌宠注入 throw → 透明、无大块错误 UI、点击穿透正常
+  - 故障注入清理后 `rg C2-test` / `rg C2-pet-test` 零命中
+  - `tsc --noEmit` 零错误
+
+## 7. P7-RC0 组合回归测试（dev 分支，v0.1.3 开发态）
+
+测试日期：2026-07-07
+
+| 阶段 | 项数 | 结果 |
+|------|------|------|
+| A. 启动 / 退出 | 6 | ✅ 全部通过 |
+| B. 桌宠显示 / 透明 / 拖拽 / 右键 | 6 | ✅ 全部通过 |
+| C. Tray 菜单 / 找回桌宠 | 8 | ✅ 全部通过 |
+| D. 控制面板 | 3 | ✅ 全部通过 |
+| E. 动作库 | 6 | ✅ 全部通过 |
+| F. 自动行为 | 3 | ✅ 全部通过 |
+| G. local.config.json | 6 | ✅ 5 项通过，1 项部分（见下方说明）|
+| H. 主进程日志 | 7 | ✅ 全部通过 |
+| I. 控制面板 ErrorBoundary | 5 | ✅ 全部通过 |
+| J. 桌宠 ErrorBoundary | 5 | ✅ 全部通过 |
+| K. Git / 产物 | 4 | ✅ 全部通过 |
+| **合计** | **59** | **58 通过 / 1 部分 / 0 未测** |
+
+### G3/G4 部分说明
+
+- **测试点**：`.bak` 恢复 / 双坏 fallback
+- **本轮结果**：未深度破坏实测
+- **原因**：该测试需要故意破坏 `local.config.json` 并重启开发进程，存在人工误操作成本，未在 RC 阶段执行
+- **依据**：P7A-1 单项阶段已直接验证配置损坏恢复逻辑（原子写 + bak 恢复代码路径）；RC 阶段通过正常保存、日志、tmp 清理、代码路径复核确认无退化
+- **建议**：发布前如有余力可选做 1 次 G3/G4 深度复测，但不作为 v0.1.3 发布的阻塞项
+
+### P7-RC0 后的当前状态
+
+- 版本号：**未升级**
+- git merge master：**未执行**
+- tag：**未打**
+- v0.1.3 GitHub Release：**未进入流程**
+
+## 8. 后续开发原则
 
 1. **小步任务**：每个任务拆分到可独立完成的粒度
 2. **单独测试**：每个任务完成后单独验证
 3. **稳定点 commit**：验证通过后立即提交，commit message 使用中文
 4. **分支策略**：
    - `master`：仅保留正式发布稳定版本（当前指向 v0.1.2 / `54359eb`）
-   - `dev`：日常开发分支（当前指向 v0.1.3 开发态 / `af88bfc`，未 merge master、未打 tag、未升级版本号、未进入发布流程）
+   - `dev`：日常开发分支（当前指向 v0.1.3 开发态 / `abb407f`，未 merge master、未打 tag、未升级版本号、未进入发布流程）
 
 ## 8. 更新日志
 
@@ -188,3 +238,5 @@
 | 2026-07-06 | P7A-1：本地配置写入可靠性完成（5620a98） |
 | 2026-07-06 | B1：重新置顶宠物窗口入口完成（f5f149f） |
 | 2026-07-06 | C1-1：主进程日志记录完成（af88bfc） |
+| 2026-07-07 | C2：渲染错误边界完成（abb407f） |
+| 2026-07-07 | P7-RC0：v0.1.3 组合回归测试通过（58 通过 / 1 部分 / 0 未测；dev 基线 abb407f） |
