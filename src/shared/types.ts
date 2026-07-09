@@ -113,9 +113,16 @@ export const IPC_CHANNELS = {
   // 打开目录
   APP_OPEN_LOG_DIR: 'APP_OPEN_LOG_DIR',
   APP_OPEN_CONFIG_DIR: 'APP_OPEN_CONFIG_DIR',
+  // 读取日志尾部
+  APP_READ_LOG_TAIL: 'APP_READ_LOG_TAIL',
 } as const
 
 /** 打开目录请求的统一返回类型（主进程 ↔ renderer） */
 export type OpenDirectoryResult =
   | { ok: true }
+  | { ok: false; error: string }
+
+/** readTail 请求的统一返回类型（主进程 ↔ renderer） */
+export type ReadLogTailResult =
+  | { ok: true; content: string; truncated: boolean }
   | { ok: false; error: string }

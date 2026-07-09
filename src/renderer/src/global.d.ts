@@ -144,6 +144,7 @@ declare global {
       quitApp: () => void
       openLogDir: () => Promise<{ ok: true } | { ok: false; error: string }>
       openConfigDir: () => Promise<{ ok: true } | { ok: false; error: string }>
+      readLogTail: () => Promise<{ ok: true; content: string; truncated: boolean } | { ok: false; error: string }>
     }
   }
 }

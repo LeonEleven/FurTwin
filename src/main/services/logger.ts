@@ -12,8 +12,80 @@
  * 这意味着可以在启动早期（logger ready 前）的模块里安全地 require 并使用 logger。
  */
 
-import { appendFileSync, existsSync, mkdirSync } from 'fs'
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readSync, statSync } from 'fs'
 import { dirname } from 'path'
+import type { ReadLogTailResult } from '../../shared/types'
+
+// ─── 读取日志尾部 (C2: 控制面板预览最近日志) ─────────────────────────────────
+
+/** 单次最多读取日志末尾 64KB，避免把巨大日志一次读入内存 */
+export const LOG_TAIL_MAX_BYTES = 64 * 1024
+
+/**
+ * 读取日志文件末尾至多 maxBytes 字节。
+ *
+ * 注意：此函数在 logger 未初始化（logFile === null）或日志文件不存在时
+ * 返回成功空内容，不抛出异常，便于 UI 直接展示"暂无日志"。
+ */
+export function readTail(maxBytes: number = LOG_TAIL_MAX_BYTES): ReadLogTailResult {
+  if (!logFile) {
+    // logger 未初始化，按"无日志"处理，不抛错
+    return { ok: true, content: '', truncated: false }
+  }
+
+  // 文件不存在 → 视为空日志
+  if (!existsSync(logFile)) {
+    return { ok: true, content: '', truncated: false }
+  }
+
+  let fd: number | null = null
+  let stat
+  try {
+    stat = statSync(logFile)
+  } catch {
+    return { ok: true, content: '', truncated: false }
+  }
+
+  if (stat.size === 0) {
+    return { ok: true, content: '', truncated: false }
+  }
+
+  try {
+
+    // 计算读取偏移：从文件末尾向前最多 maxBytes
+    const bytesToRead = Math.min(maxBytes, stat.size)
+    const offset = stat.size - bytesToRead
+    const buf = Buffer.alloc(bytesToRead)
+
+    fd = openSync(logFile, 'r')
+    let bytesRead = 0
+    while (bytesRead < buf.length) {
+      const n = readSync(fd, buf, bytesRead, buf.length - bytesRead, offset + bytesRead)
+      if (n === 0) break
+      bytesRead += n
+    }
+
+    let content = buf.subarray(0, bytesRead).toString('utf-8')
+
+    // 大文件场景：若从文件中间开始读取，首行可能是不完整的；去掉它
+    const truncated = offset > 0
+    if (truncated) {
+      const firstNewline = content.indexOf('\n')
+      if (firstNewline !== -1) {
+        content = content.slice(firstNewline + 1)
+      }
+    }
+
+    return { ok: true, content, truncated }
+  } catch (e) {
+    logger.error('logger', 'readTail failed', e as Error)
+    return { ok: false, error: String((e as Error)?.message ?? e) }
+  } finally {
+    if (fd !== null) {
+      try { closeSync(fd) } catch { /* 关闭失败不影响读取结果 */ }
+    }
+  }
+}
 
 // ─── 内部状态 ────────────────────────────────────────────────────────────────
 

@@ -91,6 +91,30 @@ export function App() {
   // 诊断区：打开目录入口错误反馈
   const [diagnosticError, setDiagnosticError] = useState<string>('')
 
+  // 诊断区：日志尾部预览
+  const [logPreviewExpanded, setLogPreviewExpanded] = useState<boolean>(false)
+  const [logPreviewLoading, setLogPreviewLoading] = useState<boolean>(false)
+  const [logPreviewContent, setLogPreviewContent] = useState<string>('')
+  const [logPreviewTruncated, setLogPreviewTruncated] = useState<boolean>(false)
+
+  const fetchLogTail = useCallback(async () => {
+    setDiagnosticError('')
+    setLogPreviewLoading(true)
+    try {
+      const res = await window.controlAPI.readLogTail()
+      if (!res.ok) {
+        setDiagnosticError(`读取日志失败：${res.error}`)
+        setLogPreviewContent('')
+        setLogPreviewTruncated(false)
+      } else {
+        setLogPreviewContent(res.content)
+        setLogPreviewTruncated(res.truncated)
+      }
+    } finally {
+      setLogPreviewLoading(false)
+    }
+  }, [])
+
   const handleOpenLogDir = useCallback(async () => {
     setDiagnosticError('')
     const res = await window.controlAPI.openLogDir()
@@ -101,6 +125,19 @@ export function App() {
     setDiagnosticError('')
     const res = await window.controlAPI.openConfigDir()
     if (!res.ok) setDiagnosticError(`打开配置目录失败：${res.error}`)
+  }, [])
+
+  const handleViewLog = useCallback(async () => {
+    setLogPreviewExpanded(true)
+    await fetchLogTail()
+  }, [fetchLogTail])
+
+  const handleRefreshLog = useCallback(async () => {
+    await fetchLogTail()
+  }, [fetchLogTail])
+
+  const handleCollapseLog = useCallback(() => {
+    setLogPreviewExpanded(false)
   }, [])
   const [editedPrompt, setEditedPrompt] = useState<string>('')
   const [customActionError, setCustomActionError] = useState<boolean>(false)
@@ -1213,7 +1250,25 @@ export function App() {
           <button onClick={handleOpenConfigDir} style={{ padding: '4px 12px', fontSize: 12, cursor: 'pointer', color: '#333', backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: 4 }}>
             打开配置目录
           </button>
+          <button onClick={handleViewLog} disabled={logPreviewLoading} style={{ padding: '4px 12px', fontSize: 12, cursor: logPreviewLoading ? 'wait' : 'pointer', color: '#333', backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: 4 }}>
+            {logPreviewLoading ? '读取中…' : '查看最近日志'}
+          </button>
         </div>
+        {logPreviewExpanded && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 11, color: '#555', fontWeight: 600 }}>最近日志</span>
+              <button onClick={handleRefreshLog} disabled={logPreviewLoading} style={{ padding: '1px 8px', fontSize: 11, cursor: logPreviewLoading ? 'wait' : 'pointer', color: '#333', backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: 3 }}>刷新</button>
+              <button onClick={handleCollapseLog} style={{ padding: '1px 8px', fontSize: 11, cursor: 'pointer', color: '#333', backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: 3 }}>收起</button>
+            </div>
+            {logPreviewTruncated && (
+              <p style={{ margin: '0 0 4px', fontSize: 11, color: '#b8860b' }}>仅显示日志末尾部分（日志超过 64KB 时被截断）。</p>
+            )}
+            <pre style={{ margin: 0, padding: '6px 8px', backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: 4, fontSize: 11, lineHeight: 1.5, color: '#333', whiteSpace: 'pre-wrap', wordBreak: 'break-all', overflowX: 'auto', maxHeight: 240, overflowY: 'auto' }}>
+{logPreviewContent === '' ? '暂无主进程日志' : logPreviewContent}
+            </pre>
+          </div>
+        )}
         {diagnosticError && (
           <p style={{ margin: '6px 0 0', fontSize: 11, color: '#cf1322' }}>{diagnosticError}</p>
         )}

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, ipcMain, shell } from 'electron'
 import { existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
-import { IPC_CHANNELS, type OpenDirectoryResult } from '../shared/types'
+import { IPC_CHANNELS, type OpenDirectoryResult, type ReadLogTailResult } from '../shared/types'
 import { createPetWindow, setupWindowResize, setupPetDrag, setupContextMenu } from './windows/petWindow'
 import { createControlPanel, setQuitting, showControlPanel } from './windows/controlPanel'
 import { createTray, destroyTray } from './tray'
@@ -16,7 +16,7 @@ import { setupPreview } from './ipc/preview'
 import { setupPetShape } from './ipc/petShape'
 import { registerUserDataProtocol, setupUserDataProtocolHandler, registerBundledProtocol, setupBundledProtocolHandler } from './services/userDataProtocol'
 import { cleanupStaleTempFiles } from './services/configStore'
-import { initLogger, logger } from './services/logger'
+import { initLogger, logger, readTail } from './services/logger'
 
 // Register protocol schemes before app is ready
 registerUserDataProtocol()
@@ -108,6 +108,16 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC_CHANNELS.APP_OPEN_CONFIG_DIR, async (): Promise<OpenDirectoryResult> => {
     const configDir = app.getPath('userData')
     return handleOpenDir('config', configDir)
+  })
+
+  // 读取日志尾部（控制面板诊断区预览最近日志）
+  ipcMain.handle(IPC_CHANNELS.APP_READ_LOG_TAIL, async (): Promise<ReadLogTailResult> => {
+    try {
+      return readTail()
+    } catch (e) {
+      logger.error('readLogTail', 'handler exception', e as Error)
+      return { ok: false, error: String((e as Error)?.message ?? e) }
+    }
   })
 
   // 行为系统（在所有 IPC 注册完成后初始化）

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, type DragPayload, type ExtractOptions, type OpenDirectoryResult } from '../shared/types'
+import { IPC_CHANNELS, type DragPayload, type ExtractOptions, type OpenDirectoryResult, type ReadLogTailResult } from '../shared/types'
 
 contextBridge.exposeInMainWorld('petAPI', {
   // --- 拖动 ---
@@ -257,5 +257,9 @@ contextBridge.exposeInMainWorld('controlAPI', {
   },
   openConfigDir: (): Promise<OpenDirectoryResult> => {
     return ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_CONFIG_DIR)
+  },
+  // --- 查看最近日志（诊断区） ---
+  readLogTail: (): Promise<ReadLogTailResult> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.APP_READ_LOG_TAIL)
   },
 })
