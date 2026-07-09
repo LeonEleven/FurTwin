@@ -116,7 +116,6 @@ contextBridge.exposeInMainWorld('controlAPI', {
   },
   onExtractDone: (callback: (result: { outputDir: string; frameCount: number; frameWidth: number; frameHeight: number; trimWidth: number; trimHeight: number }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, result: { outputDir: string; frameCount: number; frameWidth: number; frameHeight: number; trimWidth: number; trimHeight: number }) => {
-      console.log('[preload] EXTRACT_DONE handler fired')
       callback(result)
     }
     ipcRenderer.on(IPC_CHANNELS.EXTRACT_DONE, handler)
@@ -124,7 +123,6 @@ contextBridge.exposeInMainWorld('controlAPI', {
   },
   onExtractError: (callback: (err: { code: number; message: string }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, err: { code: number; message: string }) => {
-      console.log('[preload] EXTRACT_ERROR handler fired:', err)
       callback(err)
     }
     ipcRenderer.on(IPC_CHANNELS.EXTRACT_ERROR, handler)
