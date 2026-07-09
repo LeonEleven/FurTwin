@@ -110,4 +110,12 @@ export const IPC_CHANNELS = {
   // 应用信息
   GET_APP_VERSION: 'GET_APP_VERSION',
   APP_QUIT: 'APP_QUIT',
+  // 打开目录
+  APP_OPEN_LOG_DIR: 'APP_OPEN_LOG_DIR',
+  APP_OPEN_CONFIG_DIR: 'APP_OPEN_CONFIG_DIR',
 } as const
+
+/** 打开目录请求的统一返回类型（主进程 ↔ renderer） */
+export type OpenDirectoryResult =
+  | { ok: true }
+  | { ok: false; error: string }

@@ -87,6 +87,21 @@ export function App() {
   const [promptEditMode, setPromptEditMode] = useState<boolean>(false)
   const [promptManualMode, setPromptManualMode] = useState<boolean>(false)
   const [promptOutOfSync, setPromptOutOfSync] = useState<boolean>(false)
+
+  // 诊断区：打开目录入口错误反馈
+  const [diagnosticError, setDiagnosticError] = useState<string>('')
+
+  const handleOpenLogDir = useCallback(async () => {
+    setDiagnosticError('')
+    const res = await window.controlAPI.openLogDir()
+    if (!res.ok) setDiagnosticError(`打开日志目录失败：${res.error}`)
+  }, [])
+
+  const handleOpenConfigDir = useCallback(async () => {
+    setDiagnosticError('')
+    const res = await window.controlAPI.openConfigDir()
+    if (!res.ok) setDiagnosticError(`打开配置目录失败：${res.error}`)
+  }, [])
   const [editedPrompt, setEditedPrompt] = useState<string>('')
   const [customActionError, setCustomActionError] = useState<boolean>(false)
   const customActionRef = useRef<HTMLTextAreaElement>(null)
@@ -1186,6 +1201,22 @@ export function App() {
         <p style={{ margin: '4px 0 0', fontSize: 11, color: '#888' }}>
           开启后，鼠标移动到宠物区域时，宠物会暂时隐藏，并允许点击后方窗口。
         </p>
+      </div>
+
+      {/* 诊断区：打开目录 */}
+      <div style={{ marginTop: 12, padding: '8px 12px', backgroundColor: '#f5f5f5', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 12 }}>
+        <p style={{ fontWeight: 600, margin: '0 0 6px', fontSize: 12, color: '#555' }}>诊断</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={handleOpenLogDir} style={{ padding: '4px 12px', fontSize: 12, cursor: 'pointer', color: '#333', backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: 4 }}>
+            打开日志目录
+          </button>
+          <button onClick={handleOpenConfigDir} style={{ padding: '4px 12px', fontSize: 12, cursor: 'pointer', color: '#333', backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: 4 }}>
+            打开配置目录
+          </button>
+        </div>
+        {diagnosticError && (
+          <p style={{ margin: '6px 0 0', fontSize: 11, color: '#cf1322' }}>{diagnosticError}</p>
+        )}
       </div>
       </div>
       )}

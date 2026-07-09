@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_CHANNELS, type DragPayload, type ExtractOptions } from '../shared/types'
+import { IPC_CHANNELS, type DragPayload, type ExtractOptions, type OpenDirectoryResult } from '../shared/types'
 
 contextBridge.exposeInMainWorld('petAPI', {
   // --- 拖动 ---
@@ -250,5 +250,12 @@ contextBridge.exposeInMainWorld('controlAPI', {
   // --- 退出应用 ---
   quitApp: () => {
     ipcRenderer.send(IPC_CHANNELS.APP_QUIT)
+  },
+  // --- 打开目录（诊断区） ---
+  openLogDir: (): Promise<OpenDirectoryResult> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_LOG_DIR)
+  },
+  openConfigDir: (): Promise<OpenDirectoryResult> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_CONFIG_DIR)
   },
 })

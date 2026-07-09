@@ -142,6 +142,8 @@ declare global {
       getAppVersion: () => Promise<string>
       onControlPanelShown: (callback: () => void) => () => void
       quitApp: () => void
+      openLogDir: () => Promise<{ ok: true } | { ok: false; error: string }>
+      openConfigDir: () => Promise<{ ok: true } | { ok: false; error: string }>
     }
   }
 }

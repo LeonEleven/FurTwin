@@ -1,6 +1,7 @@
-import { app, BrowserWindow, Menu, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, shell } from 'electron'
+import { existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
-import { IPC_CHANNELS } from '../shared/types'
+import { IPC_CHANNELS, type OpenDirectoryResult } from '../shared/types'
 import { createPetWindow, setupWindowResize, setupPetDrag, setupContextMenu } from './windows/petWindow'
 import { createControlPanel, setQuitting, showControlPanel } from './windows/controlPanel'
 import { createTray, destroyTray } from './tray'
@@ -73,6 +74,40 @@ app.whenReady().then(() => {
   ipcMain.on(IPC_CHANNELS.APP_QUIT, () => {
     logger.info('startup', 'quit requested from control panel')
     app.quit()
+  })
+
+  // 打开目录入口（控制面板诊断区）
+  const handleOpenDir = async (dirKind: 'log' | 'config', dirPath: string): Promise<OpenDirectoryResult> => {
+    try {
+      if (!existsSync(dirPath)) {
+        try {
+          mkdirSync(dirPath, { recursive: true })
+          logger.info('openDir', `created ${dirKind} dir: ${dirPath}`)
+        } catch (mkdirErr) {
+          logger.warn('openDir', `failed to create ${dirKind} dir: ${dirPath} -> ${String(mkdirErr)}`)
+        }
+      }
+      const errMsg = await shell.openPath(dirPath)
+      if (errMsg) {
+        logger.error('openDir', `shell.openPath ${dirKind} failed: ${dirPath} -> ${errMsg}`)
+        return { ok: false, error: errMsg }
+      }
+      logger.info('openDir', `opened ${dirKind} dir: ${dirPath}`)
+      return { ok: true }
+    } catch (e) {
+      logger.error('openDir', `open ${dirKind} dir exception: ${dirPath}`, e as Error)
+      return { ok: false, error: String((e as Error)?.message ?? e) }
+    }
+  }
+
+  ipcMain.handle(IPC_CHANNELS.APP_OPEN_LOG_DIR, async (): Promise<OpenDirectoryResult> => {
+    const logDir = join(app.getPath('userData'), 'logs')
+    return handleOpenDir('log', logDir)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.APP_OPEN_CONFIG_DIR, async (): Promise<OpenDirectoryResult> => {
+    const configDir = app.getPath('userData')
+    return handleOpenDir('config', configDir)
   })
 
   // 行为系统（在所有 IPC 注册完成后初始化）
