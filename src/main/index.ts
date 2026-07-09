@@ -69,6 +69,12 @@ app.whenReady().then(() => {
   // 应用版本号
   ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => app.getVersion())
 
+  // 退出应用（由控制面板"退出 FurTwin"入口调用，复用 app.quit 完整退出链路）
+  ipcMain.on(IPC_CHANNELS.APP_QUIT, () => {
+    logger.info('startup', 'quit requested from control panel')
+    app.quit()
+  })
+
   // 行为系统（在所有 IPC 注册完成后初始化）
   setupBehaviorIPC()
   initBehavior()

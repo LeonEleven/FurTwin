@@ -249,4 +249,8 @@ contextBridge.exposeInMainWorld('controlAPI', {
     ipcRenderer.on(IPC_CHANNELS.CONTROL_PANEL_SHOWN, handler)
     return () => { ipcRenderer.removeListener(IPC_CHANNELS.CONTROL_PANEL_SHOWN, handler) }
   },
+  // --- 退出应用 ---
+  quitApp: () => {
+    ipcRenderer.send(IPC_CHANNELS.APP_QUIT)
+  },
 })

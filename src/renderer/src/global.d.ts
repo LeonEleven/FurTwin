@@ -141,6 +141,7 @@ declare global {
       onAutoPlayingChanged: (callback: (name: string | null) => void) => () => void
       getAppVersion: () => Promise<string>
       onControlPanelShown: (callback: () => void) => () => void
+      quitApp: () => void
     }
   }
 }

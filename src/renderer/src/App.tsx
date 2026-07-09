@@ -758,7 +758,19 @@ export function App() {
   return (
     <div style={{ padding: '16px 24px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: '100%', margin: '0 auto', height: '100vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`.sort-btn:not(:disabled):hover { background-color: #0958d9 !important; }`}</style>
-      <h1 style={{ fontSize: 20, marginBottom: 4 }}>FurTwin</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 4 }}>
+        <h1 style={{ fontSize: 20, margin: 0 }}>FurTwin</h1>
+        <button
+          onClick={() => window.controlAPI.quitApp()}
+          title="退出 FurTwin（关闭桌宠、控制面板和系统托盘）"
+          style={{
+            padding: '4px 12px', fontSize: 12, lineHeight: '20px', cursor: 'pointer',
+            color: '#cf1322', backgroundColor: '#fff', border: '1px solid #cf1322',
+            borderRadius: 4, fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+          退出 FurTwin
+        </button>
+      </div>
       <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>
         {appVersion ? `v${appVersion} · ` : ''}FFmpeg 绿幕视频 → 透明序列帧
       </p>
