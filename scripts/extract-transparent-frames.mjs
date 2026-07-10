@@ -92,11 +92,16 @@ FFmpeg 绿幕扣除 -> 透明序列帧
 // ─── 工具函数 ────────────────────────────────────────────
 
 function getVideoSize(inputPath) {
-  const result = spawnSync(ffprobeBin, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', inputPath], { encoding: 'utf8', shell: true, windowsHide: true })
+  const result = spawnSync(ffprobeBin, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', inputPath], { encoding: 'utf8', windowsHide: true })
   const output = (result.stdout || '').trim()
   const [width, height] = output.split(',').map(Number)
   if (!width || !height) {
-    console.error('错误: 无法获取视频分辨率')
+    console.error(`错误: 无法获取视频分辨率 (${inputPath})`)
+    console.error(`  ffprobe: ${ffprobeBin}`)
+    console.error(`  status: ${result.status}`)
+    console.error(`  signal: ${result.signal}`)
+    console.error(`  error: ${result.error?.message ?? result.error ?? 'none'}`)
+    console.error(`  stderr: ${result.stderr?.trim() ?? 'none'}`)
     process.exit(1)
   }
   return { width, height }
